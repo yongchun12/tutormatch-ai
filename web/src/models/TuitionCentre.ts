@@ -12,6 +12,9 @@ export interface ITuitionCentre extends Document {
   teachingMode: "online" | "physical" | "hybrid";
   status: "pending" | "approved" | "rejected";
   averageRating: number;
+  reviewCount: number;
+  latitude?: number;
+  longitude?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +32,10 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
     teachingMode: { type: String, enum: ["online", "physical", "hybrid"], default: "physical" },
     status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
     averageRating: { type: Number, default: 0 },
+    reviewCount: { type: Number, default: 0 },
+    // Geographic coordinates used for distance-based recommendation scoring.
+    latitude: { type: Number },
+    longitude: { type: Number },
   },
   { timestamps: true }
 );

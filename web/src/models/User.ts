@@ -8,6 +8,8 @@ export interface IUser extends Document {
   subjectsNeeded?: string[];
   preferredLocation?: string;
   maxPrice?: number;
+  latitude?: number;
+  longitude?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,6 +23,9 @@ const UserSchema: Schema<IUser> = new Schema(
     subjectsNeeded: { type: [String] },
     preferredLocation: { type: String },
     maxPrice: { type: Number },
+    // Optional coordinates so recommendations can score by distance.
+    latitude: { type: Number },
+    longitude: { type: Number },
   },
   { timestamps: true }
 );
