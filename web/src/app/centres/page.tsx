@@ -4,8 +4,14 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { MapPin, Star, BookOpen, Clock, Heart, Search, Sparkles } from "lucide-react";
+import { MapPin, Star, BookOpen, Clock, Heart, Search, Sparkles } from "lucide-react";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
+import { User } from "@/models/User";
+import { Review } from "@/models/Review";
+import { aiService, CandidateCentre } from "@/services/aiService";
 
 // Helper to assign a random gradient based on centre ID string length or char code
 const getGradient = (id: string) => {
@@ -20,24 +26,67 @@ const getGradient = (id: string) => {
 };
 
 export default async function CentresDirectory() {
+  const session = await getServerSession(authOptions);
+  let studentProfile = null;
+
+  if (session && session.user && (session.user as any).role === "student") {
+    const user = await User.findById((session.user as any).id).lean();
+    if (user) {
+      studentProfile = {
+        user_id: user._id.toString(),
+        subjects_needed: user.subjectsNeeded && user.subjectsNeeded.length > 0 ? user.subjectsNeeded : [],
+        preferred_location: user.preferredLocation || "",
+      };
+    }
+  }
+
   // Connect to DB and fetch real data
   await dbConnect();
   const rawCentres = await TuitionCentre.find({ status: "approved" }).sort({ averageRating: -1 }).lean();
   
-  // Serialize Mongoose documents to plain JS objects for the Next.js client
-  const centres = rawCentres.map((c: any) => ({
-    id: c._id.toString(),
+  // Fetch real reviews to get accurate counts
+  const allReviews = await Review.find({}).lean();
+
+  // Prepare candidate centres for AI if needed
+  const candidateCentres: CandidateCentre[] = rawCentres.map((c: any) => ({
+    centre_id: c._id.toString(),
     name: c.name,
-    description: c.description,
-    location: `${c.city}, ${c.state}`,
-    rating: c.averageRating || 4.5, // Fallback if 0
-    reviews: Math.floor(Math.random() * 200) + 10, // Mock review count for now
+    city: c.city,
+    state: c.state,
     subjects: c.subjects,
-    price: c.priceRange,
-    mode: c.teachingMode.charAt(0).toUpperCase() + c.teachingMode.slice(1),
-    aiMatch: Math.floor(Math.random() * 20) + 80, // Mock AI Match between 80-100
-    image: getGradient(c._id.toString()),
+    average_rating: c.averageRating || 4.5,
   }));
+
+  // Fetch AI Recommendations if student is logged in
+  let aiRecs: any[] = [];
+  if (studentProfile) {
+    try {
+      aiRecs = await aiService.getRecommendations(studentProfile, candidateCentres);
+    } catch (e) {
+      console.error("AI Error:", e);
+    }
+  }
+
+  // Serialize Mongoose documents to plain JS objects for the Next.js client
+  const centres = rawCentres.map((c: any) => {
+    const centreIdStr = c._id.toString();
+    const centreReviews = allReviews.filter(r => r.centreId.toString() === centreIdStr).length;
+    const aiRec = aiRecs.find(rec => rec.centre_id === centreIdStr);
+
+    return {
+      id: centreIdStr,
+      name: c.name,
+      description: c.description,
+      location: `${c.city}, ${c.state}`,
+      rating: c.averageRating || 4.5, // Fallback if 0
+      reviews: centreReviews, // Real review count
+      subjects: c.subjects,
+      price: c.priceRange,
+      mode: c.teachingMode.charAt(0).toUpperCase() + c.teachingMode.slice(1),
+      aiMatch: aiRec ? Math.round(aiRec.match_score * 100) : null, // Real AI Match (0-100) or null
+      image: getGradient(centreIdStr),
+    };
+  });
 
   return (
     <div className="flex-1 bg-slate-50 dark:bg-slate-950 min-h-screen">
@@ -171,7 +220,7 @@ export default async function CentresDirectory() {
                     </div>
                     
                     {/* AI Recommendation Badge */}
-                    {centre.aiMatch > 80 && (
+                    {centre.aiMatch !== null && centre.aiMatch >= 70 && (
                       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-semibold border border-indigo-100 dark:border-indigo-800 mt-auto">
                         <Sparkles className="w-3.5 h-3.5" />
                         {centre.aiMatch}% Match for you

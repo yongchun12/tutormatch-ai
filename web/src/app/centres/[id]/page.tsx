@@ -20,33 +20,33 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
   
   let centre = null;
   let reviewsList: { id: string; name: string; score: string; text: string; rating: number; }[] = [];
-  let aiSummary = { pos: 85, neu: 10, neg: 5, total: 128 }; // Default mock
+  let aiSummary = { pos: 0, neu: 0, neg: 0, total: 0 };
 
   try {
     const rawCentre = await TuitionCentre.findById(resolvedParams.id).lean();
     if (rawCentre) {
+      // Fetch actual reviews from DB for this centre
+      const rawReviews = await Review.find({ centreId: resolvedParams.id }).sort({ createdAt: -1 }).populate("userId", "name").lean();
+      
+      reviewsList = rawReviews.map((r: any) => ({
+        id: r._id.toString(),
+        name: r.userId ? r.userId.name : "Student User",
+        score: r.sentimentScore || "neutral",
+        text: r.comment,
+        rating: r.rating
+      }));
+
       centre = {
         id: rawCentre._id.toString(),
         name: rawCentre.name,
         description: rawCentre.description,
         location: `${rawCentre.city}, ${rawCentre.state}`,
         rating: rawCentre.averageRating || 4.5,
-        reviews: Math.floor(Math.random() * 200) + 10, // Mock review count for now
+        reviews: reviewsList.length,
         subjects: rawCentre.subjects,
         price: rawCentre.priceRange,
         mode: rawCentre.teachingMode.charAt(0).toUpperCase() + rawCentre.teachingMode.slice(1),
       };
-
-      // Fetch actual reviews from DB for this centre
-      const rawReviews = await Review.find({ centreId: resolvedParams.id }).sort({ createdAt: -1 }).lean();
-      
-      reviewsList = rawReviews.map(r => ({
-        id: r._id.toString(),
-        name: "Student User", // Mocked user name since we aren't populating user
-        score: r.sentimentScore || "neutral",
-        text: r.comment,
-        rating: r.rating
-      }));
 
       // If we have real reviews, recalculate the AI summary percentages dynamically!
       if (reviewsList.length > 0) {
@@ -71,14 +71,6 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
 
   if (!centre) {
     notFound();
-  }
-
-  // If there are no real reviews yet, provide some mock ones for the prototype
-  if (reviewsList.length === 0) {
-    reviewsList = [
-      { id: "1", name: "Sarah Lim", score: "positive", text: "Teacher was amazing, helped me pull up my Add Math grade from C to A- in just 3 months.", rating: 5 },
-      { id: "2", name: "Jason Chong", score: "neutral", text: "Classes are okay, standard stuff. But the chairs are a bit uncomfortable for 2-hour sessions.", rating: 3 },
-    ];
   }
 
   return (
@@ -191,57 +183,71 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="relative z-10">
-                    <div className="grid grid-cols-3 gap-4 mb-6">
-                      <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center shadow-sm border border-slate-100 dark:border-slate-700">
-                        <ThumbsUp className="w-6 h-6 text-emerald-500 mx-auto mb-2" />
-                        <div className="text-2xl font-bold text-slate-900 dark:text-white">{aiSummary.pos}%</div>
-                        <div className="text-xs text-slate-500 font-medium">Positive</div>
+                    {aiSummary.total === 0 ? (
+                      <div className="text-center py-8">
+                        <p className="text-indigo-900/60 dark:text-indigo-200/60">Not enough reviews to generate AI insights yet.</p>
                       </div>
-                      <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center shadow-sm border border-slate-100 dark:border-slate-700">
-                        <Minus className="w-6 h-6 text-slate-400 mx-auto mb-2" />
-                        <div className="text-2xl font-bold text-slate-900 dark:text-white">{aiSummary.neu}%</div>
-                        <div className="text-xs text-slate-500 font-medium">Neutral</div>
-                      </div>
-                      <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center shadow-sm border border-slate-100 dark:border-slate-700">
-                        <ThumbsDown className="w-6 h-6 text-rose-500 mx-auto mb-2" />
-                        <div className="text-2xl font-bold text-slate-900 dark:text-white">{aiSummary.neg}%</div>
-                        <div className="text-xs text-slate-500 font-medium">Negative</div>
-                      </div>
-                    </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-3 gap-4 mb-6">
+                          <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center shadow-sm border border-slate-100 dark:border-slate-700">
+                            <ThumbsUp className="w-6 h-6 text-emerald-500 mx-auto mb-2" />
+                            <div className="text-2xl font-bold text-slate-900 dark:text-white">{aiSummary.pos}%</div>
+                            <div className="text-xs text-slate-500 font-medium">Positive</div>
+                          </div>
+                          <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center shadow-sm border border-slate-100 dark:border-slate-700">
+                            <Minus className="w-6 h-6 text-slate-400 mx-auto mb-2" />
+                            <div className="text-2xl font-bold text-slate-900 dark:text-white">{aiSummary.neu}%</div>
+                            <div className="text-xs text-slate-500 font-medium">Neutral</div>
+                          </div>
+                          <div className="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center shadow-sm border border-slate-100 dark:border-slate-700">
+                            <ThumbsDown className="w-6 h-6 text-rose-500 mx-auto mb-2" />
+                            <div className="text-2xl font-bold text-slate-900 dark:text-white">{aiSummary.neg}%</div>
+                            <div className="text-xs text-slate-500 font-medium">Negative</div>
+                          </div>
+                        </div>
 
-                    <div className="bg-white/60 dark:bg-slate-800/60 rounded-xl p-4 backdrop-blur-sm border border-indigo-100 dark:border-indigo-800/50">
-                      <p className="text-sm text-indigo-900 dark:text-indigo-200 font-medium leading-relaxed">
-                        <span className="font-bold">AI Verdict: </span> 
-                        {aiSummary.pos > 70 ? "Highly recommended by students." : "Mixed reception from students."} 
-                      </p>
-                    </div>
+                        <div className="bg-white/60 dark:bg-slate-800/60 rounded-xl p-4 backdrop-blur-sm border border-indigo-100 dark:border-indigo-800/50">
+                          <p className="text-sm text-indigo-900 dark:text-indigo-200 font-medium leading-relaxed">
+                            <span className="font-bold">AI Verdict: </span> 
+                            {aiSummary.pos > 70 ? "Highly recommended by students." : "Mixed reception from students."} 
+                          </p>
+                        </div>
+                      </>
+                    )}
                   </CardContent>
                 </Card>
 
                 {/* Individual Reviews */}
                 <div className="space-y-4">
                   <h3 className="font-heading font-bold text-xl dark:text-white mb-4">Student Experiences</h3>
-                  {reviewsList.map((review) => (
-                    <div key={review.id} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex gap-4">
-                      <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center shrink-0">
-                        <span className="font-bold text-slate-500">{review.name[0]}</span>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <h4 className="font-bold text-slate-900 dark:text-white">{review.name}</h4>
-                          <div className="flex">
-                            {[...Array(5)].map((_, idx) => (
-                              <Star key={idx} className={`w-3.5 h-3.5 ${idx < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-300'}`} />
-                            ))}
-                          </div>
-                        </div>
-                        <Badge variant="outline" className={`mb-3 text-xs border-none ${review.score === 'positive' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30' : review.score === 'negative' ? 'bg-rose-50 text-rose-600' : 'bg-slate-100 text-slate-600'}`}>
-                          AI Score: {review.score.charAt(0).toUpperCase() + review.score.slice(1)}
-                        </Badge>
-                        <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed">"{review.text}"</p>
-                      </div>
+                  {reviewsList.length === 0 ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <p>No reviews yet. Be the first to review!</p>
                     </div>
-                  ))}
+                  ) : (
+                    reviewsList.map((review) => (
+                      <div key={review.id} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex gap-4">
+                        <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                          <span className="font-bold text-slate-500">{review.name ? review.name[0] : "S"}</span>
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <h4 className="font-bold text-slate-900 dark:text-white">{review.name}</h4>
+                            <div className="flex">
+                              {[...Array(5)].map((_, idx) => (
+                                <Star key={idx} className={`w-3.5 h-3.5 ${idx < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-300'}`} />
+                              ))}
+                            </div>
+                          </div>
+                          <Badge variant="outline" className={`mb-3 text-xs border-none ${review.score === 'positive' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30' : review.score === 'negative' ? 'bg-rose-50 text-rose-600' : 'bg-slate-100 text-slate-600'}`}>
+                            AI Score: {review.score.charAt(0).toUpperCase() + review.score.slice(1)}
+                          </Badge>
+                          <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed">"{review.text}"</p>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 {/* Interactive Review Submission Form */}

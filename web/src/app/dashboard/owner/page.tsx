@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,21 +11,21 @@ import { TuitionCentre } from "@/models/TuitionCentre";
 import { Booking } from "@/models/Booking";
 import { Review } from "@/models/Review";
 
-const DUMMY_OWNER_ID = "609b1f77bcf86cd799439022";
-
 export default async function OwnerDashboard() {
+  const session = await getServerSession(authOptions);
+  if (!session || !session.user || (session.user as any).role !== "owner") {
+    redirect("/auth/login");
+  }
+
   await dbConnect();
 
-  // Fetch centres owned by this owner
-  // In a real app, this would be by `ownerId`, but since our dummy data
-  // didn't strictly assign owners, let's just grab the first centre to simulate this.
-  const myCentres = await TuitionCentre.find({ status: "approved" }).limit(1).lean();
+  // Fetch centres owned by this logged-in owner
+  const myCentres = await TuitionCentre.find({ ownerId: (session.user as any).id }).limit(1).lean();
   const myCentre = myCentres[0];
 
   let enquiries: any[] = [];
-  let aiPos = 85;
-  let totalReviews = 128;
-  let profileViews = 1248; // Hardcoded mock metric
+  let aiPos = 0;
+  let totalReviews = 0;
 
   if (myCentre) {
     // Fetch Enquiries for their centre
@@ -30,8 +33,8 @@ export default async function OwnerDashboard() {
     
     // Calculate real sentiment based on reviews
     const reviews = await Review.find({ centreId: myCentre._id }).lean();
-    totalReviews = reviews.length > 0 ? reviews.length : 128; // Fallback mock
-    if (reviews.length > 0) {
+    totalReviews = reviews.length;
+    if (totalReviews > 0) {
       let posCount = 0;
       reviews.forEach(r => { if (r.sentimentScore === "positive") posCount++ });
       aiPos = Math.round((posCount / totalReviews) * 100);
@@ -49,7 +52,7 @@ export default async function OwnerDashboard() {
             AE
           </div>
           <div>
-            <div className="font-bold text-slate-900 dark:text-white leading-tight">Apex Academy</div>
+            <div className="font-bold text-slate-900 dark:text-white leading-tight">{session.user.name}</div>
             <div className="text-xs text-slate-500">Centre Owner</div>
           </div>
         </div>
@@ -103,24 +106,7 @@ export default async function OwnerDashboard() {
           ) : (
             <>
               {/* Top Metrics Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm">
-                  <CardContent className="p-6">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">Total Profile Views</p>
-                        <h3 className="text-3xl font-bold text-slate-900 dark:text-white">{profileViews}</h3>
-                      </div>
-                      <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
-                        <TrendingUp className="w-5 h-5" />
-                      </div>
-                    </div>
-                    <div className="mt-4 flex items-center text-sm text-emerald-600 font-medium">
-                      <ArrowUpRight className="w-4 h-4 mr-1" /> +12% from last month
-                    </div>
-                  </CardContent>
-                </Card>
-
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm">
                   <CardContent className="p-6">
                     <div className="flex justify-between items-start">
