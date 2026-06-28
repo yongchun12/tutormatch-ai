@@ -32,7 +32,18 @@ const seedData = async () => {
 
     const admin = await User.create({ name: "System Admin", email: "admin@test.com", passwordHash, role: "admin" });
     const owner = await User.create({ name: "Apex Academy Owner", email: "owner@test.com", passwordHash, role: "owner" });
-    const student = await User.create({ name: "John Doe", email: "student@test.com", passwordHash, role: "student" });
+    const student = await User.create({
+      name: "John Doe",
+      email: "student@test.com",
+      passwordHash,
+      role: "student",
+      subjectsNeeded: ["Additional Math", "Physics"],
+      preferredLocation: "Subang Jaya",
+      maxPrice: 300,
+      // Subang Jaya coordinates, used for distance-based recommendations.
+      latitude: 3.0833,
+      longitude: 101.5833,
+    });
 
     console.log("⏳ Seeding dummy Tuition Centres...");
     const centre1 = await TuitionCentre.create({
@@ -47,6 +58,10 @@ const seedData = async () => {
       teachingMode: "hybrid",
       status: "approved",
       averageRating: 4.9,
+      reviewCount: 48,
+      // Petaling Jaya - close to the student and a strong subject match.
+      latitude: 3.1073,
+      longitude: 101.6067,
     });
 
     const centre2 = await TuitionCentre.create({
@@ -61,6 +76,30 @@ const seedData = async () => {
       teachingMode: "physical",
       status: "approved",
       averageRating: 4.7,
+      reviewCount: 35,
+      // Subang Jaya - nearest, but weaker subject match for this student.
+      latitude: 3.0438,
+      longitude: 101.5808,
+    });
+
+    const centre3 = await TuitionCentre.create({
+      ownerId: owner._id,
+      name: "Genius Hub Tuition",
+      description: "Newly opened STEM centre with small group classes.",
+      address: "88 Jalan Ampang",
+      city: "Kuala Lumpur",
+      state: "Kuala Lumpur",
+      subjects: ["Additional Math", "Physics"],
+      priceRange: "RM 300/mo",
+      teachingMode: "physical",
+      status: "approved",
+      averageRating: 5.0,
+      // Perfect subjects and a perfect average, but only 3 reviews - the
+      // Wilson adjustment should stop this newcomer from topping the ranking.
+      reviewCount: 3,
+      // Kuala Lumpur - farther from the student.
+      latitude: 3.1579,
+      longitude: 101.7120,
     });
 
     console.log("⏳ Seeding dummy Reviews...");

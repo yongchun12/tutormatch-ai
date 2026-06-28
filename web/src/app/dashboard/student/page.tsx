@@ -29,14 +29,31 @@ export default async function StudentDashboard() {
   const studentProfile = {
     user_id: user._id.toString(),
     subjects_needed: user.subjectsNeeded && user.subjectsNeeded.length > 0 ? user.subjectsNeeded : ["Physics", "Additional Mathematics"],
-    preferred_location: user.preferredLocation || "Subang Jaya",
-    max_price: user.maxPrice || 300
+    user_lat: user.latitude,
+    user_lng: user.longitude,
+    max_distance_km: 25,
   };
+
+  // Pull the approved centres from our database and hand them to the Python
+  // ranking service as candidates. The service scores each on subject match,
+  // reliability-adjusted rating, and distance, then returns them ranked.
+  const candidateCentres = await TuitionCentre.find({ status: "approved" }).lean();
+  const candidates = candidateCentres.map((c: any) => ({
+    centre_id: c._id.toString(),
+    name: c.name,
+    city: c.city,
+    state: c.state,
+    subjects: c.subjects || [],
+    average_rating: c.averageRating || 0,
+    review_count: c.reviewCount || 0,
+    latitude: c.latitude,
+    longitude: c.longitude,
+  }));
 
   // Fetch real-time AI recommendations from the Python Backend
   let recommendations: any[] = [];
   try {
-    recommendations = await aiService.getRecommendations(studentProfile);
+    recommendations = await aiService.getRecommendations(studentProfile, candidates);
   } catch (error) {
     console.error("AI Service Error:", error);
   }
@@ -50,11 +67,11 @@ export default async function StudentDashboard() {
       <div className="hidden md:flex w-64 flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-6 space-y-6">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-lg">
-            J
+            {user.name.charAt(0).toUpperCase()}
           </div>
           <div>
-            <div className="font-bold text-slate-900 dark:text-white">John Doe</div>
-            <div className="text-xs text-slate-500">Student</div>
+            <div className="font-bold text-slate-900 dark:text-white">{user.name}</div>
+            <div className="text-xs text-slate-500 capitalize">{user.role}</div>
           </div>
         </div>
         
@@ -86,7 +103,7 @@ export default async function StudentDashboard() {
           
           <div className="flex justify-between items-end">
             <div>
-              <h1 className="text-3xl font-heading font-bold text-slate-900 dark:text-white mb-2">Welcome back, John!</h1>
+              <h1 className="text-3xl font-heading font-bold text-slate-900 dark:text-white mb-2">Welcome back, {user.name.split(" ")[0]}!</h1>
               <p className="text-slate-500 dark:text-slate-400">Here are your personalized AI recommendations based on your profile.</p>
             </div>
             <Button className="hidden md:flex rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700">
@@ -117,9 +134,14 @@ export default async function StudentDashboard() {
                   <Card key={i} className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 dark:bg-indigo-500/10 rounded-bl-[100px] -z-10" />
                     <CardHeader className="pb-3 z-10 relative">
-                      <div className="flex justify-between items-start">
-                        <CardTitle className="font-heading text-lg">Centre ID: {rec.centre_id}</CardTitle>
-                        <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-none dark:bg-indigo-900/50 dark:text-indigo-300 shadow-sm">
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <CardTitle className="font-heading text-lg">{rec.name}</CardTitle>
+                          {rec.location && (
+                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{rec.location}</div>
+                          )}
+                        </div>
+                        <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-none dark:bg-indigo-900/50 dark:text-indigo-300 shadow-sm shrink-0">
                           {Math.round(rec.match_score * 100)}% Match
                         </Badge>
                       </div>
