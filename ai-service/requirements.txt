@@ -6,3 +6,7 @@ pydantic
 vaderSentiment
 textblob
 pytest
+pymongo
+APScheduler
+requests
+python-dotenv

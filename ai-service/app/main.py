@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import sentiment, recommend
+from app.scheduler import start_scheduler, stop_scheduler
 
 app = FastAPI(
     title="Tuition Centre AI Service",
@@ -20,6 +21,14 @@ app.add_middleware(
 # Include the ML routers
 app.include_router(sentiment.router)
 app.include_router(recommend.router)
+
+@app.on_event("startup")
+async def on_startup():
+    start_scheduler()
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    stop_scheduler()
 
 @app.get("/")
 def read_root():
