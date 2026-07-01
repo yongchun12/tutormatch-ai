@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { AuthButtons } from "./AuthButtons";
 
-export function Navbar() {
+export async function Navbar() {
+  const session = await getServerSession(authOptions);
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-200/50 bg-white/70 dark:bg-slate-950/70 backdrop-blur-xl">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -25,18 +30,7 @@ export function Navbar() {
         </div>
         
         <div className="flex items-center gap-4">
-          <div className="hidden md:flex items-center gap-4">
-            <Link href="/auth/login">
-              <Button variant="ghost" className="font-medium hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full px-6">
-                Log in
-              </Button>
-            </Link>
-            <Link href="/auth/register">
-              <Button className="font-medium bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 rounded-full px-6 shadow-sm hover:shadow-md transition-all">
-                Sign up
-              </Button>
-            </Link>
-          </div>
+          <AuthButtons session={session} />
           <Button variant="outline" size="sm" className="md:hidden rounded-full font-medium">
             Menu
           </Button>

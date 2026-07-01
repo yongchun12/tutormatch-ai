@@ -1,8 +1,15 @@
 import Link from "next/link";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import HomeSearchClient from "@/components/HomeSearchClient";
+import { PreferencesCTAClient } from "@/components/PreferencesCTAClient";
 import { Button } from "@/components/ui/button";
 import { Search, Sparkles, MapPin, Star } from "lucide-react";
 
-export default function Home() {
+export default async function Home() {
+  const session = await getServerSession(authOptions);
+  const isLoggedIn = !!session?.user;
+
   return (
     <div className="flex flex-col min-h-[calc(100vh-4rem)]">
       {/* Hero Section */}
@@ -28,28 +35,16 @@ export default function Home() {
             Discover top-rated tuition centres tailored to your learning style, location, and budget. Backed by intelligent sentiment analysis.
           </p>
 
-          <div className="max-w-2xl mx-auto w-full pt-4">
-            <div className="flex flex-col sm:flex-row items-center gap-3 p-2 bg-white dark:bg-slate-900 rounded-2xl shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-200/60 dark:border-slate-800 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all">
-              <div className="flex-1 flex items-center gap-3 px-4 w-full border-b sm:border-b-0 sm:border-r border-slate-100 dark:border-slate-800 pb-3 sm:pb-0">
-                <Search className="w-5 h-5 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Subject (e.g. Mathematics)" 
-                  className="w-full bg-transparent border-none outline-none text-slate-900 dark:text-white placeholder:text-slate-400"
-                />
-              </div>
-              <div className="flex-1 flex items-center gap-3 px-4 w-full">
-                <MapPin className="w-5 h-5 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Location" 
-                  className="w-full bg-transparent border-none outline-none text-slate-900 dark:text-white placeholder:text-slate-400"
-                />
-              </div>
-              <Button size="lg" className="w-full sm:w-auto rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md">
-                Search
-              </Button>
+          <div className="max-w-2xl mx-auto w-full pt-4 space-y-6">
+            <HomeSearchClient />
+            
+            <div className="flex items-center justify-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+              <div className="w-12 h-px bg-slate-200 dark:bg-slate-800" />
+              <span>OR</span>
+              <div className="w-12 h-px bg-slate-200 dark:bg-slate-800" />
             </div>
+
+            <PreferencesCTAClient isLoggedIn={isLoggedIn} />
           </div>
         </div>
       </section>

@@ -10,6 +10,9 @@ import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { Booking } from "@/models/Booking";
 import { Review } from "@/models/Review";
+import { StudentLead } from "@/models/StudentLead";
+import { User } from "@/models/User";
+import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
 
 export default async function OwnerDashboard() {
   const session = await getServerSession(authOptions);
@@ -22,6 +25,13 @@ export default async function OwnerDashboard() {
   // Fetch centres owned by this logged-in owner
   const myCentres = await TuitionCentre.find({ ownerId: (session.user as any).id }).limit(1).lean();
   const myCentre = myCentres[0];
+
+  // Fetch Open Marketplace Leads (Student Preferences)
+  // Populate the studentId to get their name and email
+  const openLeads = await StudentLead.find()
+    .populate("studentId", "name email")
+    .sort({ createdAt: -1 })
+    .lean();
 
   let enquiries: any[] = [];
   let aiPos = 0;
@@ -48,8 +58,8 @@ export default async function OwnerDashboard() {
       {/* Dashboard Sidebar */}
       <div className="hidden md:flex w-64 flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-6 space-y-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center text-violet-600 dark:text-violet-400 font-bold">
-            AE
+          <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center text-violet-600 dark:text-violet-400 font-bold uppercase">
+            {session.user.name?.charAt(0) || "U"}
           </div>
           <div>
             <div className="font-bold text-slate-900 dark:text-white leading-tight">{session.user.name}</div>
@@ -73,9 +83,7 @@ export default async function OwnerDashboard() {
         </nav>
         
         <div>
-          <Button variant="ghost" className="w-full justify-start text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors">
-            <LogOut className="w-5 h-5 mr-3" /> Log Out
-          </Button>
+          <SidebarLogoutButton />
         </div>
       </div>
 
@@ -235,6 +243,81 @@ export default async function OwnerDashboard() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Open Marketplace Leads */}
+              <Card className="rounded-3xl border-indigo-200 dark:border-indigo-900/50 shadow-md bg-gradient-to-r from-indigo-50/50 to-transparent dark:from-indigo-950/20 dark:to-transparent mt-8">
+                <CardHeader className="border-b border-indigo-100 dark:border-indigo-900/50 pb-4 flex flex-row items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <CardTitle className="font-heading text-xl text-indigo-950 dark:text-indigo-100">Marketplace: Open Leads</CardTitle>
+                      <CardDescription className="text-indigo-600/70 dark:text-indigo-400/70">General student requests from the homepage seeking tuition centres.</CardDescription>
+                    </div>
+                  </div>
+                  <Badge className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm border-none">
+                    {openLeads.length} Available
+                  </Badge>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <div className="divide-y divide-indigo-100/50 dark:divide-indigo-900/30">
+                    {openLeads.length === 0 ? (
+                      <div className="p-12 text-center">
+                        <p className="text-slate-500 dark:text-slate-400">No open leads available in the marketplace right now.</p>
+                      </div>
+                    ) : (
+                      openLeads.map((lead: any) => {
+                        const student = lead.studentId || {};
+                        return (
+                          <div key={lead._id.toString()} className="p-6 hover:bg-indigo-50/50 dark:hover:bg-indigo-900/20 transition-all flex flex-col md:flex-row gap-6 md:items-start justify-between group">
+                            <div className="flex-1 space-y-4">
+                              <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center font-bold text-white shadow-md">
+                                  {student.name?.[0]?.toUpperCase() || "S"}
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h4 className="font-bold text-slate-900 dark:text-white text-lg">{student.name || "Unknown Student"}</h4>
+                                    {lead.wantsNewsletter && (
+                                      <Badge variant="outline" className="text-[10px] h-5 border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">Subscribed</Badge>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-slate-500 dark:text-slate-400">{student.email}</p>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-4 max-w-xl">
+                                <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm">
+                                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Subject Needed</p>
+                                  <p className="font-medium text-slate-900 dark:text-slate-200">{lead.subject}</p>
+                                </div>
+                                <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm">
+                                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Location</p>
+                                  <p className="font-medium text-slate-900 dark:text-slate-200 line-clamp-1">{lead.location}</p>
+                                </div>
+                              </div>
+                              {lead.remark && (
+                                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-sm text-slate-700 dark:text-slate-300 italic">
+                                  "{lead.remark}"
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex flex-col items-end gap-3 shrink-0">
+                              <p className="text-xs font-medium text-slate-400">
+                                {new Date(lead.createdAt).toLocaleDateString()}
+                              </p>
+                              <Button className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform">
+                                Contact Student
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
             </>
           )}
 

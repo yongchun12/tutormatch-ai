@@ -11,6 +11,7 @@ export async function GET() {
       return NextResponse.json({ error: "Missing GOOGLE_MAPS_API_KEY in environment" }, { status: 500 });
     }
 
+    // Dynamically fetch real tuition centres in Malaysia
     const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=Tuition+Centres+in+Malaysia&key=${apiKey}`;
     const response = await fetch(url);
     const data = await response.json();
@@ -28,6 +29,9 @@ export async function GET() {
       const address = place.formatted_address || "";
       const rating = place.rating || 4.0;
       
+      // CRITICAL FIX: Extract the actual review count from Google Maps!
+      const reviewCount = place.user_ratings_total || 0;
+      
       const city = address.includes("Kuala Lumpur") ? "Kuala Lumpur" : "Petaling Jaya";
       const state = address.includes("Selangor") ? "Selangor" : "Kuala Lumpur";
 
@@ -39,6 +43,9 @@ export async function GET() {
 
       const existing = await TuitionCentre.findOne({ name });
       
+      const latitude = place.geometry?.location?.lat;
+      const longitude = place.geometry?.location?.lng;
+      
       if (!existing) {
         await TuitionCentre.create({
           name: name,
@@ -49,16 +56,22 @@ export async function GET() {
           subjects: ["Mathematics", "English", "Science"],
           priceRange: "RM 150 - RM 300/mo",
           teachingMode: "physical",
-          status: "approved",
+          status: "pending", // Leave it as pending for Admin to approve
           averageRating: rating,
+          reviewCount: reviewCount, // Save it to the DB!
           logoUrl: logoUrl,
+          latitude: latitude,
+          longitude: longitude,
         });
         insertedCount++;
       } else {
         existing.averageRating = rating;
+        existing.reviewCount = reviewCount; // Fix previously scraped centres
         if (logoUrl) {
           existing.logoUrl = logoUrl;
         }
+        if (latitude) existing.latitude = latitude;
+        if (longitude) existing.longitude = longitude;
         await existing.save();
         updatedCount++;
       }
@@ -75,6 +88,7 @@ export async function GET() {
     });
 
   } catch (error: any) {
+    console.error("Scraping execution error:", error);
     return NextResponse.json({ error: "Scraping failed", message: error.message }, { status: 500 });
   }
 }

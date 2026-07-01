@@ -110,7 +110,10 @@ def process_pipeline():
                     
                     # 4. MERGE DATA (Take verified info from Google and inject it into the Scraped Item)
                     item['averageRating'] = place.get('rating', item.get('averageRating', 4.0))
+                    item['reviewCount'] = place.get('user_ratings_total', item.get('reviewCount', 0))
                     item['address'] = place.get('formatted_address', item.get('address'))
+                    item['latitude'] = place.get('geometry', {}).get('location', {}).get('lat')
+                    item['longitude'] = place.get('geometry', {}).get('location', {}).get('lng')
                     
                     # Extract high quality photo
                     if 'photos' in place and len(place['photos']) > 0:

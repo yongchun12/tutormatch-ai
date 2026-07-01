@@ -11,10 +11,11 @@ import dbConnect from "@/lib/db";
 import { Booking } from "@/models/Booking";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { User } from "@/models/User";
+import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
 
 export default async function StudentDashboard() {
   const session = await getServerSession(authOptions);
-  if (!session || !session.user) {
+  if (!session || !session.user || (session.user as any).role !== "student") {
     redirect("/auth/login");
   }
 
@@ -91,9 +92,7 @@ export default async function StudentDashboard() {
         </nav>
         
         <div>
-          <Button variant="ghost" className="w-full justify-start text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors">
-            <LogOut className="w-5 h-5 mr-3" /> Log Out
-          </Button>
+          <SidebarLogoutButton />
         </div>
       </div>
 
@@ -106,9 +105,11 @@ export default async function StudentDashboard() {
               <h1 className="text-3xl font-heading font-bold text-slate-900 dark:text-white mb-2">Welcome back, {user.name.split(" ")[0]}!</h1>
               <p className="text-slate-500 dark:text-slate-400">Here are your personalized AI recommendations based on your profile.</p>
             </div>
-            <Button className="hidden md:flex rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700">
-              Update Preferences
-            </Button>
+            <Link href="/preferences">
+              <Button className="hidden md:flex rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700">
+                Update Preferences
+              </Button>
+            </Link>
           </div>
 
           {/* AI Recommended Centres */}
@@ -211,9 +212,11 @@ export default async function StudentDashboard() {
                 <div className="w-full bg-white/20 rounded-full h-2 mb-4">
                   <div className="bg-white h-2 rounded-full w-[40%]"></div>
                 </div>
-                <Button className="w-full bg-white text-indigo-600 hover:bg-slate-100 rounded-xl font-bold shadow-sm">
-                  Continue Setup
-                </Button>
+                <Link href="/preferences" className="w-full">
+                  <Button className="w-full bg-white text-indigo-600 hover:bg-slate-100 rounded-xl font-bold shadow-sm">
+                    Continue Setup
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
           </div>
