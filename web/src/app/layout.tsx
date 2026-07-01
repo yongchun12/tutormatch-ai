@@ -14,7 +14,7 @@ const outfit = Outfit({
 });
 
 export const metadata: Metadata = {
-  title: "TuitionDir | AI-Powered Directory",
+  title: "TutorMatch | AI-Powered Directory",
   description: "Find the best tuition centres tailored to your needs.",
 };
 

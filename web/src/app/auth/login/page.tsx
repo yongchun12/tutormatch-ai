@@ -26,11 +26,14 @@ export default function LoginPage() {
       return;
     }
 
-    // Redirect based on dummy user or actual role (we can just redirect to generic /dashboard and let layout or next step handle it, but for simplicity let's rely on the role we know, or just refresh and let middleware/layout handle it).
-    // The showcase hardcoded the routing, let's keep it similar based on email for the prototype, or we could fetch the session.
-    if (email === "admin@test.com") {
+    // Fetch the real session from the server to get the user's actual role
+    const { getSession } = await import("next-auth/react");
+    const session = await getSession();
+    const role = (session?.user as any)?.role;
+
+    if (role === "admin") {
       router.push("/dashboard/admin");
-    } else if (email === "owner@test.com" || email.includes("owner")) {
+    } else if (role === "owner") {
       router.push("/dashboard/owner");
     } else {
       router.push("/dashboard/student");
@@ -78,11 +81,11 @@ export default function LoginPage() {
         </form>
 
         <div className="mt-6 p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 text-xs text-indigo-800 dark:text-indigo-300">
-          <p className="font-bold mb-1">Showcase Credentials (Any Password):</p>
+          <p className="font-bold mb-1">Showcase Credentials (Password: password123):</p>
           <ul className="space-y-1 ml-2">
-            <li>• student@test.com → Student Dashboard</li>
-            <li>• owner@test.com → Owner Dashboard</li>
-            <li>• admin@test.com → Admin Dashboard</li>
+            <li>• student@tuition.com → Student Dashboard</li>
+            <li>• owner@tuition.com → Owner Dashboard</li>
+            <li>• admin@tuition.com → Admin Dashboard</li>
           </ul>
         </div>
 

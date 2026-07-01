@@ -11,10 +11,12 @@ import dbConnect from "@/lib/db";
 import { Booking } from "@/models/Booking";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { User } from "@/models/User";
+import { StudentLead } from "@/models/StudentLead";
+import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
 
 export default async function StudentDashboard() {
   const session = await getServerSession(authOptions);
-  if (!session || !session.user) {
+  if (!session || !session.user || (session.user as any).role !== "student") {
     redirect("/auth/login");
   }
 
@@ -26,9 +28,18 @@ export default async function StudentDashboard() {
     redirect("/auth/login");
   }
 
+  // Fetch their latest preferences
+  const lead = await StudentLead.findOne({ studentId: user._id.toString() }).sort({ createdAt: -1 }).lean();
+  let subjectsNeeded = ["Mathematics", "Science"]; // Default
+  if (lead && lead.subject) {
+    subjectsNeeded = lead.subject.split(",").map((s: string) => s.trim());
+  } else if (user.subjectsNeeded && user.subjectsNeeded.length > 0) {
+    subjectsNeeded = user.subjectsNeeded;
+  }
+
   const studentProfile = {
     user_id: user._id.toString(),
-    subjects_needed: user.subjectsNeeded && user.subjectsNeeded.length > 0 ? user.subjectsNeeded : ["Physics", "Additional Mathematics"],
+    subjects_needed: subjectsNeeded,
     user_lat: user.latitude,
     user_lng: user.longitude,
     max_distance_km: 25,
@@ -91,9 +102,7 @@ export default async function StudentDashboard() {
         </nav>
         
         <div>
-          <Button variant="ghost" className="w-full justify-start text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors">
-            <LogOut className="w-5 h-5 mr-3" /> Log Out
-          </Button>
+          <SidebarLogoutButton />
         </div>
       </div>
 
@@ -106,9 +115,11 @@ export default async function StudentDashboard() {
               <h1 className="text-3xl font-heading font-bold text-slate-900 dark:text-white mb-2">Welcome back, {user.name.split(" ")[0]}!</h1>
               <p className="text-slate-500 dark:text-slate-400">Here are your personalized AI recommendations based on your profile.</p>
             </div>
-            <Button className="hidden md:flex rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700">
-              Update Preferences
-            </Button>
+            <Link href="/preferences">
+              <Button className="hidden md:flex rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700">
+                Update Preferences
+              </Button>
+            </Link>
           </div>
 
           {/* AI Recommended Centres */}
@@ -119,12 +130,12 @@ export default async function StudentDashboard() {
             </div>
 
             {recommendations.length === 0 ? (
-               <Card className="rounded-3xl border-rose-200 bg-rose-50 dark:bg-rose-950/20 dark:border-rose-900">
-                  <CardContent className="flex items-center gap-3 p-6 text-rose-600 dark:text-rose-400">
+               <Card className="rounded-3xl border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900">
+                  <CardContent className="flex items-center gap-3 p-6 text-amber-700 dark:text-amber-400">
                     <AlertTriangle className="w-6 h-6" />
                     <div>
-                      <h3 className="font-bold">Failed to load AI Recommendations</h3>
-                      <p className="text-sm">Please ensure the FastAPI service is running on port 8000.</p>
+                      <h3 className="font-bold">No recommendations yet</h3>
+                      <p className="text-sm">Add your subjects and location in Preferences to get matched with centres.</p>
                     </div>
                   </CardContent>
                </Card>
@@ -211,9 +222,11 @@ export default async function StudentDashboard() {
                 <div className="w-full bg-white/20 rounded-full h-2 mb-4">
                   <div className="bg-white h-2 rounded-full w-[40%]"></div>
                 </div>
-                <Button className="w-full bg-white text-indigo-600 hover:bg-slate-100 rounded-xl font-bold shadow-sm">
-                  Continue Setup
-                </Button>
+                <Link href="/preferences" className="w-full">
+                  <Button className="w-full bg-white text-indigo-600 hover:bg-slate-100 rounded-xl font-bold shadow-sm">
+                    Continue Setup
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
           </div>
