@@ -31,6 +31,13 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
   const [radius, setRadius] = useState<number>(20); // Default 20km
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState("");
+  
+  // Filtering & Sorting State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  const [selectedMode, setSelectedMode] = useState<string>("All");
+  const [maxFee, setMaxFee] = useState<number>(300);
+  const [sortOrder, setSortOrder] = useState<string>("Recommended");
 
   // Read URL parameters on mount
   useEffect(() => {
@@ -74,6 +81,28 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
   const processedCentres = useMemo(() => {
     let result = [...initialCentres];
 
+    // 1. Search Query Filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(c => 
+        c.name?.toLowerCase().includes(q) || 
+        c.subjects?.some((s: string) => s.toLowerCase().includes(q))
+      );
+    }
+
+    // 2. Subjects Filter
+    if (selectedSubjects.length > 0) {
+      result = result.filter(c => 
+        selectedSubjects.some(sub => c.subjects?.includes(sub))
+      );
+    }
+
+    // 3. Teaching Mode Filter
+    if (selectedMode !== "All") {
+      result = result.filter(c => c.mode?.toLowerCase() === selectedMode.toLowerCase());
+    }
+
+    // 4. Location Radius & Distance
     if (userLocation) {
       // Calculate distances
       result = result.map(centre => {
@@ -86,17 +115,28 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
 
       // Filter by radius
       result = result.filter(centre => centre.distance === null || centre.distance <= radius);
-      
-      // Sort by distance
+    }
+
+    // 5. Sorting
+    if (sortOrder === "Distance" && userLocation) {
       result.sort((a, b) => {
         if (a.distance === null) return 1;
         if (b.distance === null) return -1;
         return a.distance - b.distance;
       });
+    } else if (sortOrder === "Highest Rated") {
+      result.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    } else {
+      // Recommended: AI Match first, then rating
+      result.sort((a, b) => {
+        const matchDiff = (b.aiMatch || 0) - (a.aiMatch || 0);
+        if (matchDiff !== 0) return matchDiff;
+        return (b.rating || 0) - (a.rating || 0);
+      });
     }
 
     return result;
-  }, [initialCentres, userLocation, radius]);
+  }, [initialCentres, userLocation, radius, searchQuery, selectedSubjects, selectedMode, maxFee, sortOrder]);
 
   return (
     <div className="flex-1 bg-slate-50 dark:bg-slate-950 min-h-screen">
@@ -115,6 +155,8 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
                   type="text" 
                   placeholder="Search by name or subject..." 
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white shadow-sm"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
               <Button 
@@ -188,9 +230,20 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
                   {["Mathematics", "Science", "English", "Physics", "Chemistry"].map(subject => (
                     <label key={subject} className="flex items-center gap-3 cursor-pointer group">
                       <div className="w-5 h-5 rounded border border-slate-300 dark:border-slate-600 group-hover:border-indigo-500 flex items-center justify-center transition-colors">
-                        <div className="w-3 h-3 rounded-sm bg-indigo-500 opacity-0 group-has-[:checked]:opacity-100 transition-opacity" />
+                        <div className={`w-3 h-3 rounded-sm bg-indigo-500 transition-opacity ${selectedSubjects.includes(subject) ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`} />
                       </div>
-                      <input type="checkbox" className="hidden" />
+                      <input 
+                        type="checkbox" 
+                        className="hidden"
+                        checked={selectedSubjects.includes(subject)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedSubjects([...selectedSubjects, subject]);
+                          } else {
+                            setSelectedSubjects(selectedSubjects.filter(s => s !== subject));
+                          }
+                        }}
+                      />
                       <span className="text-sm text-slate-600 dark:text-slate-400">{subject}</span>
                     </label>
                   ))}
@@ -199,12 +252,18 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
                 {/* Teaching Mode */}
                 <div className="space-y-3">
                   <h4 className="text-sm font-medium text-slate-900 dark:text-white">Teaching Mode</h4>
-                  {["Physical", "Online", "Hybrid"].map(mode => (
+                  {["All", "Physical", "Online", "Hybrid"].map(mode => (
                     <label key={mode} className="flex items-center gap-3 cursor-pointer group">
                       <div className="w-5 h-5 rounded-full border border-slate-300 dark:border-slate-600 group-hover:border-indigo-500 flex items-center justify-center transition-colors">
-                        <div className="w-3 h-3 rounded-full bg-indigo-500 opacity-0 group-has-[:checked]:opacity-100 transition-opacity" />
+                        <div className={`w-3 h-3 rounded-full bg-indigo-500 transition-opacity ${selectedMode === mode ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`} />
                       </div>
-                      <input type="radio" name="mode" className="hidden" />
+                      <input 
+                        type="radio" 
+                        name="mode" 
+                        className="hidden"
+                        checked={selectedMode === mode}
+                        onChange={() => setSelectedMode(mode)}
+                      />
                       <span className="text-sm text-slate-600 dark:text-slate-400">{mode}</span>
                     </label>
                   ))}
@@ -227,11 +286,14 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
           <div className="flex-1">
             <div className="flex items-center justify-between mb-6">
               <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Showing {processedCentres.length} results</span>
-              <select className="bg-transparent text-sm font-medium text-slate-700 dark:text-slate-300 outline-none cursor-pointer">
-                {userLocation && <option>Sort by: Distance</option>}
-                <option>Sort by: Recommended</option>
-                <option>Sort by: Highest Rated</option>
-                <option>Sort by: Lowest Price</option>
+              <select 
+                className="bg-transparent text-sm font-medium text-slate-700 dark:text-slate-300 outline-none cursor-pointer"
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value)}
+              >
+                {userLocation && <option value="Distance">Sort by: Distance</option>}
+                <option value="Recommended">Sort by: Recommended</option>
+                <option value="Highest Rated">Sort by: Highest Rated</option>
               </select>
             </div>
 

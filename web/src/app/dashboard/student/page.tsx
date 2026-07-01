@@ -11,6 +11,7 @@ import dbConnect from "@/lib/db";
 import { Booking } from "@/models/Booking";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { User } from "@/models/User";
+import { StudentLead } from "@/models/StudentLead";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
 
 export default async function StudentDashboard() {
@@ -27,9 +28,18 @@ export default async function StudentDashboard() {
     redirect("/auth/login");
   }
 
+  // Fetch their latest preferences
+  const lead = await StudentLead.findOne({ studentId: user._id.toString() }).sort({ createdAt: -1 }).lean();
+  let subjectsNeeded = ["Mathematics", "Science"]; // Default
+  if (lead && lead.subject) {
+    subjectsNeeded = lead.subject.split(",").map((s: string) => s.trim());
+  } else if (user.subjectsNeeded && user.subjectsNeeded.length > 0) {
+    subjectsNeeded = user.subjectsNeeded;
+  }
+
   const studentProfile = {
     user_id: user._id.toString(),
-    subjects_needed: user.subjectsNeeded && user.subjectsNeeded.length > 0 ? user.subjectsNeeded : ["Physics", "Additional Mathematics"],
+    subjects_needed: subjectsNeeded,
     user_lat: user.latitude,
     user_lng: user.longitude,
     max_distance_km: 25,

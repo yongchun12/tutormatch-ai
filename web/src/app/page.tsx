@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import HomeSearchClient from "@/components/HomeSearchClient";
 import { PreferencesCTAClient } from "@/components/PreferencesCTAClient";
+import RecommendationSection from "@/components/RecommendationSection";
 import { Button } from "@/components/ui/button";
 import { Search, Sparkles, MapPin, Star } from "lucide-react";
 
@@ -48,6 +49,9 @@ export default async function Home() {
           </div>
         </div>
       </section>
+
+      {/* AI Recommendation Section */}
+      <RecommendationSection />
 
       {/* Features Section */}
       <section className="py-24 bg-white dark:bg-slate-950">

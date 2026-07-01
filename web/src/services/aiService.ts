@@ -1,4 +1,4 @@
-export const AI_SERVICE_URL = process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
+export const AI_SERVICE_URL = "http://127.0.0.1:8000";
 
 export interface StudentProfile {
     user_id: string;

@@ -22,15 +22,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Subject and location are required." }, { status: 400 });
     }
 
-    // 3. Connect DB & Save
+    // 3. Connect DB & Save (Upsert so they only have 1 active lead)
     await dbConnect();
-    const lead = await StudentLead.create({
-      studentId: userId,
-      subject,
-      location,
-      wantsNewsletter: !!wantsNewsletter,
-      remark: remark || "",
-    });
+    const lead = await StudentLead.findOneAndUpdate(
+      { studentId: userId },
+      {
+        subject,
+        location,
+        wantsNewsletter: !!wantsNewsletter,
+        remark: remark || "",
+      },
+      { new: true, upsert: true }
+    );
 
     return NextResponse.json({ success: true, lead }, { status: 201 });
   } catch (error: any) {
