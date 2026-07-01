@@ -130,12 +130,12 @@ export default async function StudentDashboard() {
             </div>
 
             {recommendations.length === 0 ? (
-               <Card className="rounded-3xl border-rose-200 bg-rose-50 dark:bg-rose-950/20 dark:border-rose-900">
-                  <CardContent className="flex items-center gap-3 p-6 text-rose-600 dark:text-rose-400">
+               <Card className="rounded-3xl border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900">
+                  <CardContent className="flex items-center gap-3 p-6 text-amber-700 dark:text-amber-400">
                     <AlertTriangle className="w-6 h-6" />
                     <div>
-                      <h3 className="font-bold">Failed to load AI Recommendations</h3>
-                      <p className="text-sm">Please ensure the FastAPI service is running on port 8000.</p>
+                      <h3 className="font-bold">No recommendations yet</h3>
+                      <p className="text-sm">Add your subjects and location in Preferences to get matched with centres.</p>
                     </div>
                   </CardContent>
                </Card>

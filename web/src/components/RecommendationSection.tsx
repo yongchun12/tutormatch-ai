@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { StudentLead } from "@/models/StudentLead";
+import { aiService } from "@/services/aiService";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,48 +37,14 @@ export default async function RecommendationSection() {
       const lead = await StudentLead.findOne({ studentId: userId }).sort({ createdAt: -1 }).lean();
       
       if (lead && lead.subject) {
-        // Fetch candidates for AI
-        const allCentres = await TuitionCentre.find({ status: "approved" }).lean();
-        
-        const payload = {
-          profile: {
-            user_id: userId,
-            subjects_needed: lead.subject.split(",").map(s => s.trim()),
-          },
-          centres: allCentres.map(c => ({
-            centre_id: c._id.toString(),
-            name: c.name,
-            city: c.city,
-            state: c.state,
-            subjects: c.subjects || [],
-            average_rating: c.averageRating || 0,
-            review_count: c.reviewCount || 0,
-            latitude: c.latitude,
-            longitude: c.longitude
-          })),
-          limit: 4
-        };
+        // Score the approved centres in-process against the student's profile.
+        const recs = await aiService.getRecommendationsForStudent(userId, 4);
 
-        const aiServiceUrl = "http://127.0.0.1:8000";
-        
-        try {
-          const res = await fetch(`${aiServiceUrl}/recommend/`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-            next: { revalidate: 60 } // Cache for 60 seconds
-          });
-
-          if (res.ok) {
-            const data = await res.json();
-            recommendedCentres = data;
-            usingAI = true;
-            sectionTitle = "Recommended for You";
-            sectionSubtitle = "Based on your preferences and AI-driven analysis of our directory.";
-          }
-        } catch (e) {
-          console.error("AI Service Error:", e);
-          // Fallback to top-rated handled below
+        if (recs.length > 0) {
+          recommendedCentres = recs;
+          usingAI = true;
+          sectionTitle = "Recommended for You";
+          sectionSubtitle = "Based on your preferences and analysis of our directory.";
         }
       }
     }
