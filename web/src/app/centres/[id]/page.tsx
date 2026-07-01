@@ -46,6 +46,7 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
         subjects: rawCentre.subjects,
         price: rawCentre.priceRange,
         mode: rawCentre.teachingMode.charAt(0).toUpperCase() + rawCentre.teachingMode.slice(1),
+        logoUrl: rawCentre.logoUrl || null,
       };
 
       // If we have real reviews, recalculate the AI summary percentages dynamically!
@@ -76,8 +77,11 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
   return (
     <div className="bg-slate-50 dark:bg-slate-950 min-h-screen pb-20">
       {/* Premium Hero Section */}
-      <div className="w-full h-[40vh] bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-800 relative">
-        <div className="absolute inset-0 bg-black/20" />
+      <div 
+        className={`w-full h-[40vh] relative ${centre.logoUrl ? '' : 'bg-gradient-to-br from-indigo-600 via-purple-600 to-indigo-800'}`}
+        style={centre.logoUrl ? { backgroundImage: `url(${centre.logoUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}
+      >
+        <div className="absolute inset-0 bg-black/40" />
         <div className="absolute top-0 left-0 w-full p-6">
           <Link href="/centres">
             <Button variant="ghost" className="text-white hover:bg-white/20 backdrop-blur-sm rounded-xl">

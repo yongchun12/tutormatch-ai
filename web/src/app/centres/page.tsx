@@ -4,7 +4,6 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { MapPin, Star, BookOpen, Clock, Heart, Search, Sparkles } from "lucide-react";
-import { MapPin, Star, BookOpen, Clock, Heart, Search, Sparkles } from "lucide-react";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import dbConnect from "@/lib/db";
@@ -26,6 +25,9 @@ const getGradient = (id: string) => {
 };
 
 export default async function CentresDirectory() {
+  // Connect to DB first before any Mongoose operations
+  await dbConnect();
+  
   const session = await getServerSession(authOptions);
   let studentProfile = null;
 
@@ -35,13 +37,11 @@ export default async function CentresDirectory() {
       studentProfile = {
         user_id: user._id.toString(),
         subjects_needed: user.subjectsNeeded && user.subjectsNeeded.length > 0 ? user.subjectsNeeded : [],
-        preferred_location: user.preferredLocation || "",
       };
     }
   }
 
-  // Connect to DB and fetch real data
-  await dbConnect();
+  // Fetch real data
   const rawCentres = await TuitionCentre.find({ status: "approved" }).sort({ averageRating: -1 }).lean();
   
   // Fetch real reviews to get accurate counts
@@ -84,7 +84,8 @@ export default async function CentresDirectory() {
       price: c.priceRange,
       mode: c.teachingMode.charAt(0).toUpperCase() + c.teachingMode.slice(1),
       aiMatch: aiRec ? Math.round(aiRec.match_score * 100) : null, // Real AI Match (0-100) or null
-      image: getGradient(centreIdStr),
+      image: c.logoUrl || null,
+      gradient: getGradient(centreIdStr),
     };
   });
 
@@ -183,7 +184,10 @@ export default async function CentresDirectory() {
               {centres.map((centre: any) => (
                 <Card key={centre.id} className="group overflow-hidden rounded-2xl border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:border-indigo-500/30 transition-all duration-300 flex flex-col">
                   {/* Image/Gradient Header */}
-                  <div className={`h-32 w-full ${centre.image} relative p-4 flex items-start justify-between`}>
+                  <div 
+                    className={`h-32 w-full relative p-4 flex items-start justify-between ${centre.image ? '' : centre.gradient}`}
+                    style={centre.image ? { backgroundImage: `url(${centre.image})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}
+                  >
                     <Badge className="bg-white/90 text-slate-900 hover:bg-white border-none font-bold shadow-sm backdrop-blur-md">
                       <Star className="w-3.5 h-3.5 text-yellow-500 mr-1 fill-yellow-500" />
                       {centre.rating} ({centre.reviews})

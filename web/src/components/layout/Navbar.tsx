@@ -11,7 +11,7 @@ export function Navbar() {
               <span className="text-white font-bold font-heading text-lg">T</span>
             </div>
             <span className="font-heading font-bold text-xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600 dark:from-indigo-400 dark:to-violet-400">
-              TuitionDir
+              TutorMatch
             </span>
           </Link>
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600 dark:text-slate-300">

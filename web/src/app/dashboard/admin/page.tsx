@@ -6,6 +6,7 @@ import { Users, Database, ShieldCheck, Activity, BrainCircuit, Globe, LogOut, Fi
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { approveCentreAction, rejectCentreAction } from "./actions";
+import ScrapeButton from "@/components/admin/ScrapeButton";
 
 export default async function AdminDashboard() {
   await dbConnect();
@@ -59,9 +60,12 @@ export default async function AdminDashboard() {
       <div className="flex-1 p-8 overflow-y-auto">
         <div className="max-w-6xl mx-auto space-y-8">
           
-          <div>
-            <h1 className="text-3xl font-heading font-bold text-slate-900 dark:text-white mb-2">Platform Administration</h1>
-            <p className="text-slate-500 dark:text-slate-400">Monitor system health, AI sentiment analysis processing, and crawler status.</p>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h1 className="text-3xl font-heading font-bold text-slate-900 dark:text-white mb-2">Platform Administration</h1>
+              <p className="text-slate-500 dark:text-slate-400">Monitor system health, AI sentiment analysis processing, and crawler status.</p>
+            </div>
+            <ScrapeButton />
           </div>
 
           {/* Top System Metrics */}

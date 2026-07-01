@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import sentiment, recommend
-from app.scheduler import start_scheduler, stop_scheduler
 
 app = FastAPI(
     title="Tuition Centre AI Service",
@@ -22,14 +21,10 @@ app.add_middleware(
 app.include_router(sentiment.router)
 app.include_router(recommend.router)
 
-@app.on_event("startup")
-async def on_startup():
-    start_scheduler()
-
-@app.on_event("shutdown")
-async def on_shutdown():
-    stop_scheduler()
-
 @app.get("/")
 def read_root():
     return {"message": "AI Microservice is running. Head to /docs for the API schema."}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

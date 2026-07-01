@@ -40,7 +40,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-md p-8 rounded-3xl bg-white dark:bg-slate-900 shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-100 dark:border-slate-800 my-8">
         <div className="text-center mb-8">
           <h1 className="font-heading text-3xl font-bold tracking-tight text-slate-900 dark:text-white mb-2">Create an Account</h1>
-          <p className="text-slate-500 dark:text-slate-400">Join TuitionDir to find your perfect centre</p>
+          <p className="text-slate-500 dark:text-slate-400">Join TutorMatch to find your perfect centre</p>
         </div>
 
         <form className="space-y-4" onSubmit={handleRegister}>
