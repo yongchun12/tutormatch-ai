@@ -2,17 +2,20 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     await dbConnect();
+    
+    const { searchParams } = new URL(req.url);
+    const locationQuery = searchParams.get("location") || "Malaysia";
     
     const apiKey = process.env.GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "Missing GOOGLE_MAPS_API_KEY in environment" }, { status: 500 });
     }
 
-    // Dynamically fetch real tuition centres in Malaysia
-    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=Tuition+Centres+in+Malaysia&key=${apiKey}`;
+    // Dynamically fetch real tuition centres for the requested area
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=Tuition+Centres+in+${encodeURIComponent(locationQuery)}&key=${apiKey}`;
     const response = await fetch(url);
     const data = await response.json();
 
