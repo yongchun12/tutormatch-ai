@@ -114,6 +114,11 @@ def process_pipeline():
                     item['address'] = place.get('formatted_address', item.get('address'))
                     item['latitude'] = place.get('geometry', {}).get('location', {}).get('lat')
                     item['longitude'] = place.get('geometry', {}).get('location', {}).get('lng')
+                    if item['latitude'] and item['longitude']:
+                        item['location'] = {
+                            "type": "Point",
+                            "coordinates": [item['longitude'], item['latitude']]
+                        }
                     
                     # Extract high quality photo
                     if 'photos' in place and len(place['photos']) > 0:

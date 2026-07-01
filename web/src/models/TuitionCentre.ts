@@ -19,6 +19,10 @@ export interface ITuitionCentre extends Document {
   reviewCount: number;
   latitude?: number;
   longitude?: number;
+  location?: {
+    type: "Point";
+    coordinates: [number, number];
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,9 +48,22 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
     // Geographic coordinates used for distance-based recommendation scoring.
     latitude: { type: Number },
     longitude: { type: Number },
+    location: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        required: false,
+      },
+      coordinates: {
+        type: [Number],
+        required: false,
+      },
+    },
   },
   { timestamps: true }
 );
+
+TuitionCentreSchema.index({ location: "2dsphere" });
 
 export const TuitionCentre: Model<ITuitionCentre> = 
   mongoose.models.TuitionCentre || mongoose.model<ITuitionCentre>("TuitionCentre", TuitionCentreSchema);

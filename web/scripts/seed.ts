@@ -62,6 +62,7 @@ const seedData = async () => {
       // Petaling Jaya - close to the student and a strong subject match.
       latitude: 3.1073,
       longitude: 101.6067,
+      location: { type: "Point", coordinates: [101.6067, 3.1073] },
     });
 
     const centre2 = await TuitionCentre.create({
@@ -80,6 +81,7 @@ const seedData = async () => {
       // Subang Jaya - nearest, but weaker subject match for this student.
       latitude: 3.0438,
       longitude: 101.5808,
+      location: { type: "Point", coordinates: [101.5808, 3.0438] },
     });
 
     const centre3 = await TuitionCentre.create({
@@ -100,6 +102,7 @@ const seedData = async () => {
       // Kuala Lumpur - farther from the student.
       latitude: 3.1579,
       longitude: 101.7120,
+      location: { type: "Point", coordinates: [101.7120, 3.1579] },
     });
 
     console.log("⏳ Seeding dummy Reviews...");

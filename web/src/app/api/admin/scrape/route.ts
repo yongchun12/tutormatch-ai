@@ -62,6 +62,7 @@ export async function GET() {
           logoUrl: logoUrl,
           latitude: latitude,
           longitude: longitude,
+          location: latitude && longitude ? { type: "Point", coordinates: [longitude, latitude] } : undefined,
         });
         insertedCount++;
       } else {
@@ -72,6 +73,9 @@ export async function GET() {
         }
         if (latitude) existing.latitude = latitude;
         if (longitude) existing.longitude = longitude;
+        if (latitude && longitude) {
+          existing.location = { type: "Point", coordinates: [longitude, latitude] };
+        }
         await existing.save();
         updatedCount++;
       }
