@@ -188,8 +188,27 @@ export const aiService = {
         maxDistanceKm: 25,
       };
 
-      const centres = await TuitionCentre.find({ status: "approved" }).lean();
-      const candidates: CentreInput[] = centres.map((c) => ({
+      let centres: any[];
+
+      if (student.userLat != null && student.userLng != null) {
+        // Use GeoJSON $geoNear for extreme performance!
+        centres = await TuitionCentre.aggregate([
+          {
+            $geoNear: {
+              near: { type: "Point", coordinates: [student.userLng, student.userLat] },
+              distanceField: "calculatedDistance",
+              maxDistance: (student.maxDistanceKm || 25) * 1000, // meters
+              query: { status: "approved" },
+              spherical: true,
+            },
+          },
+        ]);
+      } else {
+        // Fallback for students without a location
+        centres = await TuitionCentre.find({ status: "approved" }).lean();
+      }
+
+      const candidates: CentreInput[] = centres.map((c: any) => ({
         centreId: String(c._id),
         name: c.name,
         city: c.city,

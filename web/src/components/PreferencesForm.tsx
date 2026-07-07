@@ -34,6 +34,7 @@ export default function PreferencesForm() {
 
       setSuccess(true);
       setTimeout(() => {
+        router.refresh();
         router.push("/dashboard/student");
       }, 3000);
     } catch (err: any) {
