@@ -44,6 +44,14 @@ const getGradient = (id: string) => {
   return gradients[index];
 };
 
+function mapPriceLevel(level: number | undefined): string {
+  if (level === 1) return "Inexpensive ($)";
+  if (level === 2) return "Moderate ($$)";
+  if (level === 3) return "Expensive ($$$)";
+  if (level === 4) return "Premium ($$$$)";
+  return "Contact for pricing";
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -151,6 +159,12 @@ export async function GET(req: NextRequest) {
         if (!existing.googlePlaceId && place.place_id) {
            existing.googlePlaceId = place.place_id;
         }
+        
+        // Update priceRange if we have a valid price_level and it's currently default
+        if (place.price_level !== undefined && existing.priceRange === "Contact for pricing") {
+            existing.priceRange = mapPriceLevel(place.price_level);
+        }
+        
         await existing.save();
         
         // Return existing updated record to the frontend so it appears in real-time
@@ -179,7 +193,7 @@ export async function GET(req: NextRequest) {
           city: city,
           state: state,
           subjects: deducedSubjects,
-          priceRange: "Contact for pricing",
+          priceRange: mapPriceLevel(place.price_level),
           teachingMode: "physical",
           status: "approved",
           averageRating: place.rating || 0,

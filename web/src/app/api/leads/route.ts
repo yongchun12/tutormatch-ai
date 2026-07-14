@@ -58,12 +58,95 @@ export async function POST(req: Request) {
           await User.findByIdAndUpdate(userId, {
             latitude: lat,
             longitude: lng,
-            preferredLocation: location
+            preferredLocation: location,
+            subjectsNeeded: subject.split(",").map((s: string) => s.trim())
           });
+        } else {
+          // Fallback dictionary if Google Maps fails
+          const fallbacks: Record<string, {lat: number, lng: number}> = {
+            johor: { lat: 1.4927, lng: 103.7414 },
+            "kuala lumpur": { lat: 3.1412, lng: 101.6865 },
+            penang: { lat: 5.4141, lng: 100.3288 },
+            selangor: { lat: 3.0738, lng: 101.5183 },
+            perak: { lat: 4.5956, lng: 101.0901 },
+            sabah: { lat: 5.9788, lng: 116.0753 },
+            sarawak: { lat: 1.5533, lng: 110.3592 },
+            pahang: { lat: 3.8126, lng: 103.3256 },
+            kedah: { lat: 6.1184, lng: 100.3685 },
+            kelantan: { lat: 6.1254, lng: 102.2381 },
+            terengganu: { lat: 5.3117, lng: 103.1324 },
+            perlis: { lat: 6.4449, lng: 100.2048 },
+            melaka: { lat: 2.1896, lng: 102.2501 },
+            "negeri sembilan": { lat: 2.7258, lng: 101.9424 }
+          };
+
+          const locKey = location.toLowerCase();
+          let matchedFallback = null;
+          for (const key of Object.keys(fallbacks)) {
+            if (locKey.includes(key)) {
+              matchedFallback = fallbacks[key];
+              break;
+            }
+          }
+
+          if (matchedFallback) {
+            await User.findByIdAndUpdate(userId, {
+              latitude: matchedFallback.lat,
+              longitude: matchedFallback.lng,
+              preferredLocation: location,
+              subjectsNeeded: subject.split(",").map((s: string) => s.trim())
+            });
+          } else {
+            await User.findByIdAndUpdate(userId, {
+              preferredLocation: location,
+              subjectsNeeded: subject.split(",").map((s: string) => s.trim())
+            });
+          }
         }
       } catch (geocodeErr) {
         console.error("Geocoding failed in leads API:", geocodeErr);
       }
+    } else if (location) {
+        // Fallback dictionary if no API key
+        const fallbacks: Record<string, {lat: number, lng: number}> = {
+          johor: { lat: 1.4927, lng: 103.7414 },
+          "kuala lumpur": { lat: 3.1412, lng: 101.6865 },
+          penang: { lat: 5.4141, lng: 100.3288 },
+          selangor: { lat: 3.0738, lng: 101.5183 },
+          perak: { lat: 4.5956, lng: 101.0901 },
+          sabah: { lat: 5.9788, lng: 116.0753 },
+          sarawak: { lat: 1.5533, lng: 110.3592 },
+          pahang: { lat: 3.8126, lng: 103.3256 },
+          kedah: { lat: 6.1184, lng: 100.3685 },
+          kelantan: { lat: 6.1254, lng: 102.2381 },
+          terengganu: { lat: 5.3117, lng: 103.1324 },
+          perlis: { lat: 6.4449, lng: 100.2048 },
+          melaka: { lat: 2.1896, lng: 102.2501 },
+          "negeri sembilan": { lat: 2.7258, lng: 101.9424 }
+        };
+
+        const locKey = location.toLowerCase();
+        let matchedFallback = null;
+        for (const key of Object.keys(fallbacks)) {
+          if (locKey.includes(key)) {
+            matchedFallback = fallbacks[key];
+            break;
+          }
+        }
+
+        if (matchedFallback) {
+          await User.findByIdAndUpdate(userId, {
+            latitude: matchedFallback.lat,
+            longitude: matchedFallback.lng,
+            preferredLocation: location,
+            subjectsNeeded: subject.split(",").map((s: string) => s.trim())
+          });
+        } else {
+          await User.findByIdAndUpdate(userId, {
+            preferredLocation: location,
+            subjectsNeeded: subject.split(",").map((s: string) => s.trim())
+          });
+        }
     }
 
     return NextResponse.json({ success: true, lead }, { status: 201 });

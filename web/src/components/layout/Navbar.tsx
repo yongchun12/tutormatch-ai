@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { AuthButtons } from "./AuthButtons";
+import { GlobalLocationSelector } from "./GlobalLocationSelector";
 
 export async function Navbar() {
   const session = await getServerSession(authOptions);
@@ -27,6 +28,9 @@ export async function Navbar() {
               AI Recommendations
             </Link>
           </nav>
+          <div className="ml-4 border-l border-slate-200 dark:border-slate-800 pl-4">
+            <GlobalLocationSelector />
+          </div>
         </div>
         
         <div className="flex items-center gap-4">

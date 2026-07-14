@@ -3,6 +3,7 @@
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { User } from "@/models/User";
+import { ClaimRequest } from "@/models/ClaimRequest";
 import { revalidatePath } from "next/cache";
 
 export async function approveCentreAction(centreId: string) {
@@ -24,6 +25,27 @@ export async function approveCentreAction(centreId: string) {
 
     revalidatePath("/dashboard/admin");
     revalidatePath("/centres");
+}
+
+export async function verifyCentreAction(centreId: string) {
+    if (!centreId) {
+        throw new Error("Missing centreId");
+    }
+
+    await dbConnect();
+
+    const updated = await TuitionCentre.findByIdAndUpdate(
+        centreId,
+        { isVerified: true },
+        { new: true }
+    );
+
+    if (!updated) {
+        throw new Error("Centre not found");
+    }
+
+    revalidatePath("/dashboard/admin");
+    revalidatePath(`/centres/${centreId}`);
 }
 
 export async function rejectCentreAction(centreId: string) {
@@ -163,4 +185,63 @@ export async function updateCentreAction(formData: FormData) {
     revalidatePath("/dashboard/admin/centres");
     revalidatePath("/centres");
     revalidatePath(`/centres/${id}`);
+}
+
+export async function submitClaimRequestAction(userId: string, centreId: string, proofMessage: string) {
+    if (!userId || !centreId || !proofMessage) {
+        throw new Error("Missing required fields for claim request");
+    }
+
+    await dbConnect();
+    
+    // Check if a pending claim already exists
+    const existing = await ClaimRequest.findOne({ userId, centreId, status: "pending" });
+    if (existing) {
+        throw new Error("You already have a pending claim for this centre.");
+    }
+
+    await ClaimRequest.create({
+        userId,
+        centreId,
+        proofMessage,
+        status: "pending"
+    });
+
+    revalidatePath(`/centres/${centreId}`);
+}
+
+export async function approveClaimRequestAction(claimId: string) {
+    await dbConnect();
+    
+    const claim = await ClaimRequest.findById(claimId);
+    if (!claim) throw new Error("Claim not found");
+
+    // Approve the claim
+    claim.status = "approved";
+    await claim.save();
+
+    // Upgrade the user to owner
+    await User.findByIdAndUpdate(claim.userId, { role: "owner" });
+
+    // Update the TuitionCentre to be verified and owned by this user
+    await TuitionCentre.findByIdAndUpdate(claim.centreId, {
+        ownerId: claim.userId,
+        isVerified: true
+    });
+
+    revalidatePath("/dashboard/admin");
+    revalidatePath(`/centres/${claim.centreId}`);
+}
+
+export async function rejectClaimRequestAction(claimId: string) {
+    await dbConnect();
+    
+    const claim = await ClaimRequest.findById(claimId);
+    if (!claim) throw new Error("Claim not found");
+
+    // Reject the claim
+    claim.status = "rejected";
+    await claim.save();
+
+    revalidatePath("/dashboard/admin");
 }

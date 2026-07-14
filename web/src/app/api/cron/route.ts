@@ -3,6 +3,14 @@ import dbConnect from '@/lib/db';
 import { TuitionCentre } from '@/models/TuitionCentre';
 import { SystemLog } from '@/models/SystemLog';
 
+function mapPriceLevel(level: number | undefined): string {
+  if (level === 1) return "Inexpensive ($)";
+  if (level === 2) return "Moderate ($$)";
+  if (level === 3) return "Expensive ($$$)";
+  if (level === 4) return "Premium ($$$$)";
+  return "Contact for pricing";
+}
+
 export async function GET(request: Request) {
   // Optional: Verify the request is coming from Vercel via authorization header
   const authHeader = request.headers.get('authorization');
@@ -77,7 +85,7 @@ export async function GET(request: Request) {
           city: targetArea,
           state: "Malaysia",
           subjects: deducedSubjects,
-          priceRange: "Contact for pricing",
+          priceRange: mapPriceLevel(place.price_level),
           teachingMode: "physical",
           status: "pending", // Scheduled crawls go to pending queue
           averageRating: place.rating || 0,

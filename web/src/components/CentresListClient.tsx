@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { MapPin, Star, Clock, Heart, Search, Sparkles, Navigation, Map } from "lucide-react";
+import { MapPin, Star, Clock, Heart, Search, Sparkles, Navigation, Map, X } from "lucide-react";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Loader2 } from "lucide-react";
+import CompareModal from "./CompareModal";
 
 // Haversine formula to calculate distance between two coordinates in km
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -46,6 +47,22 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
   const [isCrawling, setIsCrawling] = useState(false);
   const [crawlMessage, setCrawlMessage] = useState("");
   const [hasCrawled, setHasCrawled] = useState(false);
+
+  // Compare State
+  const [compareList, setCompareList] = useState<any[]>([]);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+
+  const toggleCompare = (centre: any) => {
+    if (compareList.some(c => c.id === centre.id)) {
+      setCompareList(compareList.filter(c => c.id !== centre.id));
+    } else {
+      if (compareList.length < 3) {
+        setCompareList([...compareList, centre]);
+      } else {
+        alert("You can only compare up to 3 centres at a time.");
+      }
+    }
+  };
 
   // Read URL parameters on mount
   useEffect(() => {
@@ -535,11 +552,21 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
                         {centre.mode} Mode
                       </div>
                     </div>
-                    <Link href={`/centres/${centre.id}`}>
-                      <Button className="rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700">
-                        View Details
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => toggleCompare(centre)}
+                        className={`text-xs h-9 px-2 hidden sm:flex ${compareList.some(c => c.id === centre.id) ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' : 'text-slate-600 dark:text-slate-400'}`}
+                      >
+                        {compareList.some(c => c.id === centre.id) ? 'Added' : '+ Compare'}
                       </Button>
-                    </Link>
+                      <Link href={`/centres/${centre.id}`}>
+                        <Button className="rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 h-9">
+                          View Details
+                        </Button>
+                      </Link>
+                    </div>
                   </CardFooter>
                 </Card>
               ))}
@@ -557,6 +584,23 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
           </div>
         </div>
       </div>
+
+      {/* Floating Compare Bar */}
+      {compareList.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-900 dark:bg-slate-800 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-4 border border-slate-700">
+          <span className="font-semibold text-sm whitespace-nowrap">{compareList.length} / 3 Centres Selected</span>
+          <Button size="sm" onClick={() => setIsCompareModalOpen(true)} className="bg-indigo-500 hover:bg-indigo-600 text-white rounded-full text-xs h-8 px-4">
+            Compare Now
+          </Button>
+          <button onClick={() => setCompareList([])} className="text-slate-400 hover:text-white ml-2 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Compare Modal */}
+      <CompareModal isOpen={isCompareModalOpen} setIsOpen={setIsCompareModalOpen} centres={compareList} />
+
     </div>
   );
 }

@@ -15,6 +15,7 @@ import ReviewForm from "@/components/ReviewForm";
 import ReviewsClient from "@/components/ReviewsClient";
 import EnquiryForm from "@/components/EnquiryForm";
 import SaveCentreButton from "@/components/SaveCentreButton";
+import ClaimCentreButtonWrapper from "@/components/ClaimCentreButtonWrapper";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
@@ -74,6 +75,7 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
         website: rawCentre.website,
         email: rawCentre.email,
         ownerId: rawCentre.ownerId,
+        isVerified: rawCentre.isVerified || false,
       };
       
       // Fetch Google Reviews dynamically if available
@@ -162,9 +164,11 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
             <div className="flex flex-col md:flex-row items-end justify-between gap-6">
               <div>
                 <div className="flex items-center gap-3 mb-3">
-                  <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white border-none shadow-lg">
-                    <ShieldCheck className="w-3.5 h-3.5 mr-1" /> Verified Centre
-                  </Badge>
+                  {centre.isVerified && (
+                    <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white border-none shadow-lg">
+                      <ShieldCheck className="w-3.5 h-3.5 mr-1" /> Verified Centre
+                    </Badge>
+                  )}
                   <Badge className="bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-none">
                     {centre.mode} Mode
                   </Badge>
@@ -408,10 +412,28 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
               <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none bg-white dark:bg-slate-900">
                 <CardHeader>
                   <CardTitle className="font-heading">Enquire Now</CardTitle>
-                  <CardDescription>Get in touch with the centre admin directly.</CardDescription>
+                  <CardDescription>
+                    {centre.isVerified 
+                      ? "Get in touch with the centre admin directly." 
+                      : "This centre has not been claimed by its owner yet."}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <EnquiryForm centreId={centre.id} centreName={centre.name} />
+                  {centre.isVerified ? (
+                    <EnquiryForm centreId={centre.id} centreName={centre.name} />
+                  ) : (
+                    <div className="text-center p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                      <ShieldCheck className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+                      <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                        Direct enquiries are only available for verified centres. If you are the owner, you can claim this listing to start receiving student enquiries.
+                      </p>
+                      <ClaimCentreButtonWrapper 
+                        centreId={centre.id} 
+                        centreName={centre.name} 
+                        userId={(session?.user as any)?.id} 
+                      />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
