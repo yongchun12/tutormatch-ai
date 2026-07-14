@@ -389,6 +389,19 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                       </Button>
                     </div>
                   )}
+                  
+                  <div className="pt-3 mt-1">
+                    <a 
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${centre.latitude && centre.longitude ? `${centre.latitude},${centre.longitude}` : encodeURIComponent(centre.name + ' ' + centre.location)}`}
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="w-full"
+                    >
+                      <Button variant="outline" className="w-full rounded-xl border-slate-200 dark:border-slate-700 shadow-sm font-semibold hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:text-indigo-600 dark:hover:text-indigo-400">
+                        <MapPin className="w-4 h-4 mr-2 text-indigo-500" /> Get Directions
+                      </Button>
+                    </a>
+                  </div>
                 </CardContent>
               </Card>
 

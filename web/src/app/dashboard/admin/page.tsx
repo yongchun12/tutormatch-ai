@@ -9,6 +9,7 @@ import { Users, Database, ShieldCheck, Activity, BrainCircuit, Globe, LogOut, Fi
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { Enquiry } from "@/models/Enquiry";
+import { SystemLog } from "@/models/SystemLog";
 import { approveCentreAction, rejectCentreAction } from "./actions";
 import ScrapeButton from "@/components/admin/ScrapeButton";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
@@ -29,6 +30,9 @@ export default async function AdminDashboard() {
 
   // Fetch enquiries count
   const totalEnquiriesCount = await Enquiry.countDocuments();
+
+  // Fetch real system logs
+  const systemLogs = await SystemLog.find().sort({ createdAt: -1 }).limit(20).lean();
 
   return (
     <div className="p-8">
@@ -150,41 +154,42 @@ export default async function AdminDashboard() {
               </CardContent>
             </Card>
 
-            {/* AI Engine Logs */}
+            {/* System Logs */}
             <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col h-full p-0 gap-0">
               <CardHeader className="bg-slate-900 border-b border-slate-800 p-4 pb-4">
                 <div className="flex justify-between items-center">
                   <div>
                     <CardTitle className="font-heading text-lg text-white flex items-center gap-2">
-                      <BrainCircuit className="w-5 h-5 text-violet-400" /> AI Microservice Logs
+                      <Activity className="w-5 h-5 text-indigo-400" /> System Action Logs
                     </CardTitle>
-                    <CardDescription className="text-slate-400">FastAPI Sentiment & Recommendation Engine</CardDescription>
+                    <CardDescription className="text-slate-400">Live feed from crawlers and core services</CardDescription>
                   </div>
                   <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                 </div>
               </CardHeader>
               <CardContent className="p-0 bg-slate-950 flex-1 relative h-64 overflow-hidden">
                 <div className="absolute inset-0 p-4 font-mono text-xs overflow-y-auto space-y-3">
-                  <div className="flex flex-col"><span className="text-slate-500">[10:15:02] INFO:</span> <span className="text-slate-300">Processing batch of 45 new reviews...</span></div>
-                  <div className="flex flex-col"><span className="text-emerald-500">[10:15:05] SUCCESS:</span> <span className="text-emerald-300">Sentiment analysis complete. (Pos: 32, Neu: 8, Neg: 5)</span></div>
-                  <div className="flex flex-col"><span className="text-slate-500">[10:17:22] INFO:</span> <span className="text-slate-300">Request received on /recommend endpoint for UserID: 1045</span></div>
-                  <div className="flex flex-col"><span className="text-slate-500">[10:17:23] INFO:</span> <span className="text-slate-300">Loading collaborative filtering model weights...</span></div>
-                  <div className="flex flex-col"><span className="text-emerald-500">[10:17:23] SUCCESS:</span> <span className="text-emerald-300">Returned 5 recommendations. Latency: 124ms</span></div>
-                  <div className="flex flex-col"><span className="text-slate-500">[10:22:14] INFO:</span> <span className="text-slate-300">Scheduled Scrapy job 'tuition_crawler_my' triggered.</span></div>
-                  <div className="flex flex-col"><span className="text-amber-500">[10:22:15] WARN:</span> <span className="text-amber-300">Dynamic content detected. Falling back to Selenium driver.</span></div>
-                  <div className="flex flex-col"><span className="text-slate-500">[10:25:30] INFO:</span> <span className="text-slate-300">Crawled 12 new listings from remote source.</span></div>
-                  <div className="flex flex-col"><span className="text-emerald-500">[10:25:31] SUCCESS:</span> <span className="text-emerald-300">Added 12 centres to Pending Approvals queue.</span></div>
-                  <div className="flex flex-col"><span className="text-slate-500">[10:30:12] INFO:</span> <span className="text-slate-300">Retraining recommendation model with new interactions...</span></div>
-                  <div className="flex flex-col"><span className="text-slate-500">[10:32:05] INFO:</span> <span className="text-slate-300">Epoch 10/10 complete. Loss: 0.041</span></div>
-                  <div className="flex flex-col"><span className="text-emerald-500">[10:32:06] SUCCESS:</span> <span className="text-emerald-300">Model weights updated in registry.</span></div>
-                  <div className="flex flex-col"><span className="text-slate-500">[10:45:00] INFO:</span> <span className="text-slate-300">Health check ping from load balancer.</span></div>
-                  <div className="flex flex-col"><span className="text-emerald-500">[10:45:01] SUCCESS:</span> <span className="text-emerald-300">Status 200 OK.</span></div>
-                  <div className="flex flex-col"><span className="text-slate-500">[11:00:22] INFO:</span> <span className="text-slate-300">Request received on /recommend endpoint for UserID: 2011</span></div>
-                  <div className="flex flex-col"><span className="text-emerald-500">[11:00:23] SUCCESS:</span> <span className="text-emerald-300">Returned 10 recommendations. Latency: 98ms</span></div>
-                  <div className="flex flex-col"><span className="text-slate-500">[11:05:14] INFO:</span> <span className="text-slate-300">Background task: indexing text for search engine.</span></div>
-                  <div className="flex flex-col"><span className="text-slate-500">[11:10:30] INFO:</span> <span className="text-slate-300">Indexed 15,200 documents.</span></div>
-                  <div className="flex flex-col"><span className="text-amber-500">[11:10:31] WARN:</span> <span className="text-amber-300">Memory usage at 85%. Triggering garbage collection.</span></div>
-                  <div className="flex flex-col"><span className="text-emerald-500">[11:10:35] SUCCESS:</span> <span className="text-emerald-300">Memory usage returned to 45%.</span></div>
+                  {systemLogs.length === 0 ? (
+                    <div className="text-slate-500 text-center mt-8">No logs recorded yet.</div>
+                  ) : (
+                    systemLogs.map((log) => {
+                      let levelColor = "text-slate-500";
+                      if (log.level === "SUCCESS") levelColor = "text-emerald-500";
+                      if (log.level === "WARN") levelColor = "text-amber-500";
+                      if (log.level === "ERROR") levelColor = "text-rose-500";
+
+                      const timeString = new Date(log.createdAt).toLocaleTimeString('en-US', { hour12: false });
+                      
+                      return (
+                        <div key={log._id.toString()} className="flex flex-col">
+                          <span className={`${levelColor} font-bold`}>
+                            [{timeString}] {log.level}:
+                          </span> 
+                          <span className="text-slate-300 ml-2">{log.message}</span>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </CardContent>
             </Card>
