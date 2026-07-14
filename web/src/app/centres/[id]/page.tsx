@@ -12,6 +12,7 @@ import { TuitionCentre } from "@/models/TuitionCentre";
 import { Review } from "@/models/Review";
 import { User } from "@/models/User";
 import ReviewForm from "@/components/ReviewForm";
+import ReviewsClient from "@/components/ReviewsClient";
 import EnquiryForm from "@/components/EnquiryForm";
 import SaveCentreButton from "@/components/SaveCentreButton";
 import { getServerSession } from "next-auth";
@@ -291,39 +292,7 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                 </Card>
 
                 {/* Individual Reviews */}
-                <div className="space-y-4">
-                  <h3 className="font-heading font-bold text-xl dark:text-white mb-4">Student Experiences</h3>
-                  {reviewsList.length === 0 ? (
-                    <div className="text-center py-8 text-slate-500">
-                      {centre.reviews > 0 
-                        ? <p>We are currently gathering detailed written reviews for this centre. ({centre.reviews} total ratings)</p>
-                        : <p>No reviews yet. Be the first to review!</p>
-                      }
-                    </div>
-                  ) : (
-                    reviewsList.map((review) => (
-                      <div key={review.id} className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex gap-4">
-                        <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center shrink-0">
-                          <span className="font-bold text-slate-500">{review.name ? review.name[0] : "S"}</span>
-                        </div>
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <h4 className="font-bold text-slate-900 dark:text-white">{review.name}</h4>
-                            <div className="flex">
-                              {[...Array(5)].map((_, idx) => (
-                                <Star key={idx} className={`w-3.5 h-3.5 ${idx < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-300'}`} />
-                              ))}
-                            </div>
-                          </div>
-                          <Badge variant="outline" className={`mb-3 text-xs border-none ${review.score === 'positive' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30' : review.score === 'negative' ? 'bg-rose-50 text-rose-600' : 'bg-slate-100 text-slate-600'}`}>
-                            AI Score: {review.score.charAt(0).toUpperCase() + review.score.slice(1)}
-                          </Badge>
-                          <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed">"{review.text}"</p>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+                <ReviewsClient reviewsList={reviewsList} totalRatings={centre.reviews} />
 
                 {/* Interactive Review Submission Form */}
                 <ReviewForm centreId={centre.id} />
