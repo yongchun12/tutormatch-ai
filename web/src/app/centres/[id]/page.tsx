@@ -92,7 +92,7 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                 rating: r.rating
               }));
               reviewsList = [...reviewsList, ...googleReviews];
-              centre.reviews = reviewsList.length;
+              centre.reviews = Math.max(reviewsList.length, rawCentre.reviewCount || 0);
             }
           }
         } catch (e) {
