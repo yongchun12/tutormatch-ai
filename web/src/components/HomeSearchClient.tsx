@@ -98,7 +98,7 @@ export default function HomeSearchClient() {
   return (
     <div className="max-w-2xl mx-auto w-full pt-4 relative" ref={dropdownRef}>
       <div className="flex flex-col sm:flex-row items-center gap-3 p-2 bg-white dark:bg-slate-900 rounded-2xl shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-200/60 dark:border-slate-800 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all z-20 relative">
-        <div className="flex-1 flex items-center gap-3 px-4 w-full border-b sm:border-b-0 sm:border-r border-slate-100 dark:border-slate-800 pb-3 sm:pb-0 relative" ref={subjectDropdownRef}>
+        <div className="flex-1 flex items-center gap-3 px-4 w-full border-b sm:border-b-0 sm:border-r border-slate-100 dark:border-slate-800 pb-3 sm:pb-0 relative z-30" ref={subjectDropdownRef}>
           <Search className="w-5 h-5 text-slate-400 shrink-0" />
           <input 
             type="text" 

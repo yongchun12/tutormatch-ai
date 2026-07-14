@@ -178,14 +178,7 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                   <span className="ml-1 text-slate-300">({aiSummary.total} reviews)</span>
                 </div>
               </div>
-              <div className="flex gap-3">
-                <Button variant="outline" className="bg-white/10 text-white border-white/20 hover:bg-white/20 backdrop-blur-md rounded-xl">
-                  <Heart className="w-4 h-4 mr-2" /> Save
-                </Button>
-                <Button className="bg-white text-indigo-600 hover:bg-slate-100 rounded-xl shadow-xl font-bold">
-                  Book Trial Class
-                </Button>
-              </div>
+
             </div>
             
             {session && session.user && (session.user as any).role === "student" && (
@@ -302,7 +295,10 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                   <h3 className="font-heading font-bold text-xl dark:text-white mb-4">Student Experiences</h3>
                   {reviewsList.length === 0 ? (
                     <div className="text-center py-8 text-slate-500">
-                      <p>No reviews yet. Be the first to review!</p>
+                      {centre.reviews > 0 
+                        ? <p>We are currently gathering detailed written reviews for this centre. ({centre.reviews} total ratings)</p>
+                        : <p>No reviews yet. Be the first to review!</p>
+                      }
                     </div>
                   ) : (
                     reviewsList.map((review) => (

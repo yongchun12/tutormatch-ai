@@ -30,7 +30,7 @@ export async function Navbar() {
         </div>
         
         <div className="flex items-center gap-4">
-          <AuthButtons session={session} />
+          <AuthButtons />
           <Button variant="outline" size="sm" className="md:hidden rounded-full font-medium">
             Menu
           </Button>

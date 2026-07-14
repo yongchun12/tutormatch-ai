@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -13,9 +13,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LogOut, LayoutDashboard, User } from "lucide-react";
 
-export function AuthButtons({ session }: { session: any }) {
+export function AuthButtons() {
+  const { data: session } = useSession();
+
   if (session && session.user) {
-    const role = session.user.role;
+    const role = (session.user as any).role;
     const dashboardUrl = 
       role === "admin" ? "/dashboard/admin" : 
       role === "owner" ? "/dashboard/owner" : 
