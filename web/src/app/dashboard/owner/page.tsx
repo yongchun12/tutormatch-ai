@@ -8,11 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Sparkles, Users, MessageSquare, TrendingUp, BarChart3, Settings, LogOut, ArrowUpRight, Clock, AlertTriangle } from "lucide-react";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
-import { Booking } from "@/models/Booking";
+import { Enquiry } from "@/models/Enquiry";
 import { Review } from "@/models/Review";
 import { StudentLead } from "@/models/StudentLead";
 import { User } from "@/models/User";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
+import { generateMockCentreAction } from "./actions";
 
 export default async function OwnerDashboard() {
   const session = await getServerSession(authOptions);
@@ -39,7 +40,7 @@ export default async function OwnerDashboard() {
 
   if (myCentre) {
     // Fetch Enquiries for their centre
-    enquiries = await Booking.find({ centreId: myCentre._id }).sort({ createdAt: -1 }).lean();
+    enquiries = await Enquiry.find({ centreId: myCentre._id }).populate("studentId", "name email").sort({ createdAt: -1 }).lean();
     
     // Calculate real sentiment based on reviews
     const reviews = await Review.find({ centreId: myCentre._id }).lean();
@@ -54,41 +55,8 @@ export default async function OwnerDashboard() {
   const overallSentimentText = aiPos > 70 ? "Positive" : aiPos < 40 ? "Negative" : "Neutral";
 
   return (
-    <div className="flex-1 bg-slate-50 dark:bg-slate-950 min-h-screen flex">
-      {/* Dashboard Sidebar */}
-      <div className="hidden md:flex w-64 flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center text-violet-600 dark:text-violet-400 font-bold uppercase">
-            {session.user.name?.charAt(0) || "U"}
-          </div>
-          <div>
-            <div className="font-bold text-slate-900 dark:text-white leading-tight">{session.user.name}</div>
-            <div className="text-xs text-slate-500">Centre Owner</div>
-          </div>
-        </div>
-        
-        <nav className="flex-1 space-y-2 mt-8">
-          <Link href="/dashboard/owner" className="flex items-center gap-3 px-4 py-3 rounded-xl bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 font-medium">
-            <BarChart3 className="w-5 h-5" /> Overview
-          </Link>
-          <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50 font-medium transition-colors">
-            <Sparkles className="w-5 h-5" /> AI Insights
-          </Link>
-          <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50 font-medium transition-colors">
-            <Users className="w-5 h-5" /> Enquiries
-          </Link>
-          <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/50 font-medium transition-colors">
-            <Settings className="w-5 h-5" /> Manage Centre
-          </Link>
-        </nav>
-        
-        <div>
-          <SidebarLogoutButton />
-        </div>
-      </div>
-
+    <div className="flex-1 p-8 overflow-y-auto">
       {/* Main Dashboard Content */}
-      <div className="flex-1 p-8 overflow-y-auto">
         <div className="max-w-6xl mx-auto space-y-8">
           
           <div className="flex justify-between items-end">
@@ -103,12 +71,23 @@ export default async function OwnerDashboard() {
 
           {!myCentre ? (
             <Card className="rounded-3xl border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900">
-              <CardContent className="flex items-center gap-3 p-6 text-amber-600 dark:text-amber-400">
-                <AlertTriangle className="w-6 h-6" />
-                <div>
-                  <h3 className="font-bold">No Active Centres</h3>
-                  <p className="text-sm">Please ensure there is at least one approved tuition centre in the database to view analytics.</p>
+              <CardContent className="flex flex-col md:flex-row items-center justify-between gap-6 p-8 text-amber-600 dark:text-amber-400">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-amber-100 dark:bg-amber-900/50 rounded-full">
+                    <AlertTriangle className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold mb-1">No Active Centres</h3>
+                    <p className="text-sm max-w-lg text-amber-700 dark:text-amber-300">
+                      You don't have any tuition centres registered yet. You need at least one approved tuition centre in the database to view analytics and receive enquiries.
+                    </p>
+                  </div>
                 </div>
+                <form action={generateMockCentreAction}>
+                  <Button type="submit" className="rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold px-6 py-6 shadow-lg shadow-amber-500/20 whitespace-nowrap transition-transform hover:scale-105">
+                    Generate Mock Centre (Testing)
+                  </Button>
+                </form>
               </CardContent>
             </Card>
           ) : (
@@ -222,19 +201,27 @@ export default async function OwnerDashboard() {
                         enquiries.map((enquiry) => (
                           <div key={enquiry._id.toString()} className="p-6 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-center justify-between">
                             <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-slate-500">
-                                S
+                              <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-slate-500 uppercase">
+                                {(enquiry as any).studentId?.name?.charAt(0) || "S"}
                               </div>
                               <div>
-                                <p className="font-semibold text-slate-900 dark:text-white text-sm">Student User</p>
+                                <p className="font-semibold text-slate-900 dark:text-white text-sm">{(enquiry as any).studentId?.name || "Student User"}</p>
                                 <p className="text-xs text-slate-500 line-clamp-1 max-w-[200px]">"{enquiry.message}"</p>
                               </div>
                             </div>
                             <div className="text-right">
-                              <p className="text-xs text-slate-400 mb-2">Just now</p>
-                              <Button size="sm" className="h-8 rounded-lg text-xs bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900">
-                                Reply
-                              </Button>
+                              <Badge variant="outline" className={`mb-2 capitalize text-xs ${
+                                enquiry.status === 'pending' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                              }`}>
+                                {enquiry.status}
+                              </Badge>
+                              <div>
+                                <Link href="/dashboard/owner/enquiries">
+                                  <Button size="sm" className="h-8 rounded-lg text-xs bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900">
+                                    Manage
+                                  </Button>
+                                </Link>
+                              </div>
                             </div>
                           </div>
                         ))
@@ -320,9 +307,7 @@ export default async function OwnerDashboard() {
 
             </>
           )}
-
         </div>
-      </div>
     </div>
   );
 }

@@ -87,6 +87,8 @@ export default async function CentresDirectory() {
       aiMatch: aiRec ? Math.round(aiRec.match_score * 100) : null, // Real AI Match (0-100) or null
       image: c.logoUrl || null,
       gradient: getGradient(centreIdStr),
+      latitude: c.location?.coordinates ? c.location.coordinates[1] : c.latitude,
+      longitude: c.location?.coordinates ? c.location.coordinates[0] : c.longitude,
     };
   });
 

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 export default function HomeSearchClient() {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [subjectQuery, setSubjectQuery] = useState("");
   const [predictions, setPredictions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -58,8 +59,14 @@ export default function HomeSearchClient() {
       const data = await res.json();
       
       if (data.lat && data.lng) {
-        // Navigate to centres page with coordinates
-        router.push(`/centres?lat=${data.lat}&lng=${data.lng}&address=${encodeURIComponent(description)}`);
+        // Navigate to centres page with coordinates and subject
+        const params = new URLSearchParams();
+        params.append("lat", data.lat);
+        params.append("lng", data.lng);
+        params.append("address", description);
+        if (subjectQuery) params.append("q", subjectQuery);
+        
+        router.push(`/centres?${params.toString()}`);
       }
     } catch (err) {
       console.error(err);
@@ -67,7 +74,10 @@ export default function HomeSearchClient() {
   };
 
   const handleGenericSearch = () => {
-    router.push("/centres");
+    const params = new URLSearchParams();
+    if (subjectQuery) params.append("q", subjectQuery);
+    if (query) params.append("address", query);
+    router.push(`/centres?${params.toString()}`);
   };
 
   return (
@@ -78,6 +88,8 @@ export default function HomeSearchClient() {
           <input 
             type="text" 
             placeholder="Subject (e.g. Mathematics)" 
+            value={subjectQuery}
+            onChange={(e) => setSubjectQuery(e.target.value)}
             className="w-full bg-transparent border-none outline-none text-slate-900 dark:text-white placeholder:text-slate-400"
           />
         </div>

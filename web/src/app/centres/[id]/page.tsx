@@ -10,20 +10,39 @@ import { MapPin, Star, Clock, CheckCircle2, TrendingUp, MessageSquare, ArrowLeft
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { Review } from "@/models/Review";
+import { User } from "@/models/User";
 import ReviewForm from "@/components/ReviewForm";
-import { submitEnquiryAction } from "./actions";
+import EnquiryForm from "@/components/EnquiryForm";
+import SaveCentreButton from "@/components/SaveCentreButton";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 export default async function CentreDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params; // Must await params in Server Components
   
   await dbConnect();
   
+  const session = await getServerSession(authOptions);
+  let userSavedCentres: string[] = [];
+  if (session && session.user && (session.user as any).role === "student") {
+    const user = await User.findById((session.user as any).id).lean();
+    if (user && user.savedCentres) {
+      userSavedCentres = user.savedCentres.map(id => id.toString());
+    }
+  }
+
   let centre = null;
   let reviewsList: { id: string; name: string; score: string; text: string; rating: number; }[] = [];
   let aiSummary = { pos: 0, neu: 0, neg: 0, total: 0 };
 
   try {
-    const rawCentre = await TuitionCentre.findById(resolvedParams.id).lean();
+    let rawCentre;
+    try {
+      rawCentre = await TuitionCentre.findById(resolvedParams.id).lean();
+    } catch (e) {
+      return notFound();
+    }
+    
     if (rawCentre) {
       // Fetch actual reviews from DB for this centre
       const rawReviews = await Review.find({ centreId: resolvedParams.id }).sort({ createdAt: -1 }).populate("userId", "name").lean();
@@ -47,6 +66,8 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
         price: rawCentre.priceRange,
         mode: rawCentre.teachingMode.charAt(0).toUpperCase() + rawCentre.teachingMode.slice(1),
         logoUrl: rawCentre.logoUrl || null,
+        latitude: rawCentre.latitude,
+        longitude: rawCentre.longitude,
       };
 
       // If we have real reviews, recalculate the AI summary percentages dynamically!
@@ -120,6 +141,14 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                 </Button>
               </div>
             </div>
+            
+            {session && session.user && (session.user as any).role === "student" && (
+                <SaveCentreButton 
+                    centreId={centre.id} 
+                    initialIsSaved={userSavedCentres.includes(centre.id)} 
+                    className="ml-auto w-12 h-12 shadow-sm border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800" 
+                />
+            )}
           </div>
         </div>
       </div>
@@ -294,32 +323,26 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                   <CardDescription>Get in touch with the centre admin directly.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <form action={submitEnquiryAction}>
-                    <input type="hidden" name="centreId" value={centre.id} />
-                    <div className="space-y-2 mb-4">
-                      <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Your Message</label>
-                      <textarea 
-                        name="message"
-                        required
-                        className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none h-32 dark:text-white"
-                        placeholder={`Hi, I would like to know more about the classes at ${centre.name}...`}
-                      ></textarea>
-                    </div>
-                    <Button type="submit" className="w-full py-6 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md text-base">
-                      <MessageSquare className="w-5 h-5 mr-2" /> Send Message
-                    </Button>
-                  </form>
+                  <EnquiryForm centreId={centre.id} centreName={centre.name} />
                 </CardContent>
               </Card>
 
-              <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
+              <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 overflow-hidden">
                 <CardHeader>
                   <CardTitle className="font-heading text-lg">Location Map</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="w-full h-48 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
-                    <MapPin className="w-8 h-8 opacity-50" />
-                    <span className="ml-2 font-medium">Map Integration</span>
+                <CardContent className="p-0">
+                  <div className="w-full h-64 bg-slate-100 dark:bg-slate-800 relative">
+                    <iframe 
+                      title="Centre Location Map"
+                      width="100%" 
+                      height="100%" 
+                      style={{ border: 0 }}
+                      loading="lazy" 
+                      allowFullScreen 
+                      referrerPolicy="no-referrer-when-downgrade"
+                      src={`https://maps.google.com/maps?q=${centre.latitude && centre.longitude ? `${centre.latitude},${centre.longitude}` : encodeURIComponent(centre.name + ' ' + centre.location)}&t=&z=14&ie=UTF8&iwloc=&output=embed`}
+                    ></iframe>
                   </div>
                 </CardContent>
               </Card>

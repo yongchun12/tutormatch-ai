@@ -23,7 +23,7 @@ const migrate = async () => {
     let updatedCount = 0;
     for (const centre of centres) {
       if (centre.latitude != null && centre.longitude != null) {
-        if (!centre.location || !centre.location.coordinates || centre.location.coordinates.length === 0) {
+        if (!centre.location || !centre.location.coordinates) {
           centre.location = {
             type: "Point",
             coordinates: [centre.longitude, centre.latitude],

@@ -58,7 +58,7 @@ class TuitionSpider(scrapy.Spider):
                 "subjects": centre_data["subjects"],
                 "priceRange": centre_data["priceRange"],
                 "teachingMode": centre_data["teachingMode"],
-                "status": "pending",
+                "status": "approved",
                 "averageRating": 0.0, # Will be enriched by Google Maps in pipeline
                 "reviewCount": 0,
                 "logoUrl": "", # Will be enriched by Google Maps in pipeline
