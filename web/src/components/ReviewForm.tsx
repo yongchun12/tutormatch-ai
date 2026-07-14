@@ -9,17 +9,28 @@ import { submitReviewAction } from "@/app/centres/[id]/actions";
 export default function ReviewForm({ centreId }: { centreId: string }) {
     const [rating, setRating] = useState(5);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState(false);
 
     async function handleAction(formData: FormData) {
         setIsSubmitting(true);
+        setError(null);
+        setSuccess(false);
         try {
-            await submitReviewAction(formData);
+            const res = await submitReviewAction(formData);
+            if (res && res.success === false) {
+                setError(res.error || "Failed to submit review");
+                return;
+            }
+            
             // reset form after success
             const form = document.getElementById("review-form") as HTMLFormElement;
             form.reset();
             setRating(5);
-        } catch (error) {
-            console.error(error);
+            setSuccess(true);
+        } catch (err: any) {
+            console.error(err);
+            setError(err.message || "An unexpected error occurred");
         } finally {
             setIsSubmitting(false);
         }
@@ -60,6 +71,17 @@ export default function ReviewForm({ centreId }: { centreId: string }) {
                             placeholder="Share your experience to help other students..."
                         ></textarea>
                     </div>
+
+                    {error && (
+                        <div className="p-3 text-sm rounded-xl bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800">
+                            {error}
+                        </div>
+                    )}
+                    {success && (
+                        <div className="p-3 text-sm rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                            Review submitted successfully!
+                        </div>
+                    )}
 
                     <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium">
                         <Send className="w-4 h-4 mr-2" /> {isSubmitting ? "Scoring Sentiment..." : "Submit Review"}

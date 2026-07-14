@@ -8,10 +8,23 @@ import { Button } from "@/components/ui/button";
 export default function HomeSearchClient() {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [subjectQuery, setSubjectQuery] = useState("");
   const [predictions, setPredictions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const subjectDropdownRef = useRef<HTMLDivElement>(null);
+  const [showSubjectDropdown, setShowSubjectDropdown] = useState(false);
+
+  const SUGGESTED_SUBJECTS = [
+    "Mathematics", "Additional Mathematics", "Science", "Physics", 
+    "Chemistry", "Biology", "English", "Bahasa Melayu", 
+    "Sejarah", "Prinsip Perakaunan", "Ekonomi", "Perniagaan"
+  ];
+
+  const filteredSubjects = SUGGESTED_SUBJECTS.filter(s => 
+    s.toLowerCase().includes(subjectQuery.toLowerCase())
+  );
 
   // Debounce autocomplete API call
   useEffect(() => {
@@ -44,6 +57,9 @@ export default function HomeSearchClient() {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
       }
+      if (subjectDropdownRef.current && !subjectDropdownRef.current.contains(event.target as Node)) {
+        setShowSubjectDropdown(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -58,8 +74,14 @@ export default function HomeSearchClient() {
       const data = await res.json();
       
       if (data.lat && data.lng) {
-        // Navigate to centres page with coordinates
-        router.push(`/centres?lat=${data.lat}&lng=${data.lng}&address=${encodeURIComponent(description)}`);
+        // Navigate to centres page with coordinates and subject
+        const params = new URLSearchParams();
+        params.append("lat", data.lat);
+        params.append("lng", data.lng);
+        params.append("address", description);
+        if (subjectQuery) params.append("q", subjectQuery);
+        
+        router.push(`/centres?${params.toString()}`);
       }
     } catch (err) {
       console.error(err);
@@ -67,19 +89,46 @@ export default function HomeSearchClient() {
   };
 
   const handleGenericSearch = () => {
-    router.push("/centres");
+    const params = new URLSearchParams();
+    if (subjectQuery) params.append("q", subjectQuery);
+    if (query) params.append("address", query);
+    router.push(`/centres?${params.toString()}`);
   };
 
   return (
     <div className="max-w-2xl mx-auto w-full pt-4 relative" ref={dropdownRef}>
       <div className="flex flex-col sm:flex-row items-center gap-3 p-2 bg-white dark:bg-slate-900 rounded-2xl shadow-xl shadow-slate-200/50 dark:shadow-none border border-slate-200/60 dark:border-slate-800 focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all z-20 relative">
-        <div className="flex-1 flex items-center gap-3 px-4 w-full border-b sm:border-b-0 sm:border-r border-slate-100 dark:border-slate-800 pb-3 sm:pb-0">
+        <div className="flex-1 flex items-center gap-3 px-4 w-full border-b sm:border-b-0 sm:border-r border-slate-100 dark:border-slate-800 pb-3 sm:pb-0 relative" ref={subjectDropdownRef}>
           <Search className="w-5 h-5 text-slate-400 shrink-0" />
           <input 
             type="text" 
             placeholder="Subject (e.g. Mathematics)" 
+            value={subjectQuery}
+            onChange={(e) => {
+              setSubjectQuery(e.target.value);
+              setShowSubjectDropdown(true);
+            }}
+            onFocus={() => setShowSubjectDropdown(true)}
             className="w-full bg-transparent border-none outline-none text-slate-900 dark:text-white placeholder:text-slate-400"
           />
+          
+          {/* Subject Combobox Dropdown */}
+          {showSubjectDropdown && filteredSubjects.length > 0 && (
+            <div className="absolute top-[calc(100%+8px)] left-0 w-full sm:w-[320px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl overflow-hidden z-40 max-h-64 overflow-y-auto">
+              {filteredSubjects.map((sub) => (
+                <button
+                  key={sub}
+                  onClick={() => {
+                    setSubjectQuery(sub);
+                    setShowSubjectDropdown(false);
+                  }}
+                  className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800/50 last:border-0 text-sm font-medium text-slate-900 dark:text-white transition-colors"
+                >
+                  {sub}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         <div className="flex-1 flex items-center gap-3 px-4 w-full relative">
           <MapPin className="w-5 h-5 text-slate-400 shrink-0" />

@@ -17,6 +17,7 @@ export interface ITuitionCentre extends Document {
   email?: string;
   averageRating: number;
   reviewCount: number;
+  googlePlaceId?: string;
   latitude?: number;
   longitude?: number;
   location?: {
@@ -45,6 +46,7 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
     email: { type: String },
     averageRating: { type: Number, default: 0 },
     reviewCount: { type: Number, default: 0 },
+    googlePlaceId: { type: String },
     // Geographic coordinates used for distance-based recommendation scoring.
     latitude: { type: Number },
     longitude: { type: Number },

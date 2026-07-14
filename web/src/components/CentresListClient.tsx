@@ -8,6 +8,8 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { MapPin, Star, Clock, Heart, Search, Sparkles, Navigation, Map } from "lucide-react";
+import { PaginationControls } from "@/components/ui/pagination-controls";
+import { Loader2 } from "lucide-react";
 
 // Haversine formula to calculate distance between two coordinates in km
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -24,11 +26,12 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 export default function CentresListClient({ initialCentres }: { initialCentres: any[] }) {
+  const [allCentres, setAllCentres] = useState<any[]>(initialCentres);
   const searchParams = useSearchParams();
   
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [locationName, setLocationName] = useState<string>("");
-  const [radius, setRadius] = useState<number>(20); // Default 20km
+  const [radius, setRadius] = useState<number>(50); // Default 50km per user request
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState("");
   
@@ -38,18 +41,37 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
   const [selectedMode, setSelectedMode] = useState<string>("All");
   const [maxFee, setMaxFee] = useState<number>(300);
   const [sortOrder, setSortOrder] = useState<string>("Recommended");
+  
+  // Crawling State
+  const [isCrawling, setIsCrawling] = useState(false);
+  const [crawlMessage, setCrawlMessage] = useState("");
+  const [hasCrawled, setHasCrawled] = useState(false);
 
   // Read URL parameters on mount
   useEffect(() => {
     const lat = searchParams.get("lat");
     const lng = searchParams.get("lng");
     const address = searchParams.get("address");
+    const q = searchParams.get("q");
+
+    if (q) setSearchQuery(q);
 
     if (lat && lng) {
       setUserLocation({ lat: parseFloat(lat), lng: parseFloat(lng) });
       if (address) setLocationName(address);
     }
   }, [searchParams]);
+
+  // Dynamic Subjects from loaded directory
+  const dynamicSubjects = useMemo(() => {
+    const subjectsSet = new Set<string>();
+    allCentres.forEach(c => {
+      if (Array.isArray(c.subjects)) {
+        c.subjects.forEach((sub: string) => subjectsSet.add(sub));
+      }
+    });
+    return Array.from(subjectsSet).sort();
+  }, [allCentres]);
 
   const handleGetLocation = () => {
     setIsLocating(true);
@@ -62,12 +84,22 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
     }
 
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserLocation({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
-        });
-        setLocationName("Your GPS Location");
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setUserLocation({ lat, lng });
+        
+        try {
+          const res = await fetch(`/api/location/geocode?lat=${lat}&lng=${lng}`);
+          const data = await res.json();
+          if (data.address) {
+            setLocationName(data.address);
+          } else {
+            setLocationName("Your GPS Location");
+          }
+        } catch (e) {
+          setLocationName("Your GPS Location");
+        }
         setIsLocating(false);
       },
       (error) => {
@@ -79,15 +111,31 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
   };
 
   const processedCentres = useMemo(() => {
-    let result = [...initialCentres];
+    let result = [...allCentres];
 
-    // 1. Search Query Filter
-    if (searchQuery.trim()) {
+    // 1. Search Query Filter (includes subject text and address text if coordinates missing)
+    const hasCoords = searchParams.has("lat") && searchParams.has("lng");
+    const addrText = !hasCoords ? searchParams.get("address") : null;
+    
+    if (searchQuery.trim() || addrText) {
       const q = searchQuery.toLowerCase();
-      result = result.filter(c => 
-        c.name?.toLowerCase().includes(q) || 
-        c.subjects?.some((s: string) => s.toLowerCase().includes(q))
-      );
+      const addrQ = addrText?.toLowerCase() || "";
+      const searchTerms = [q, addrQ].filter(Boolean);
+      
+      if (searchTerms.length > 0) {
+        result = result.filter(c => {
+          return searchTerms.some(rawTerm => {
+            // Split by comma to handle "Penang, Malaysia" -> "Penang"
+            const term = rawTerm.split(',')[0].trim();
+            const termAlias = term.replace('penang', 'pinang');
+            
+            return c.name?.toLowerCase().includes(term) || 
+                   c.subjects?.some((s: string) => s.toLowerCase().includes(term)) ||
+                   c.location?.toLowerCase().includes(termAlias) ||
+                   c.description?.toLowerCase().includes(termAlias);
+          });
+        });
+      }
     }
 
     // 2. Subjects Filter
@@ -102,19 +150,41 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
       result = result.filter(c => c.mode?.toLowerCase() === selectedMode.toLowerCase());
     }
 
+    // 4. Max Fee Filter
+    // Parse the price string (e.g. "RM 100 - RM 200") to get the max value
+    result = result.filter(c => {
+      if (!c.price) return true; // If no price listed, keep it
+      const priceStr = c.price.toString().replace(/[^0-9-]/g, '');
+      const parts = priceStr.split('-');
+      // Check the lower bound or the only value
+      const priceVal = parseInt(parts[0], 10);
+      if (!isNaN(priceVal)) {
+        return priceVal <= maxFee;
+      }
+      return true;
+    });
+
     // 4. Location Radius & Distance
     if (userLocation) {
-      // Calculate distances
       result = result.map(centre => {
         if (centre.latitude && centre.longitude) {
           const dist = calculateDistance(userLocation.lat, userLocation.lng, centre.latitude, centre.longitude);
           return { ...centre, distance: dist };
         }
+        // If a centre has no coordinates, we cannot compute distance.
+        // We set it to null and let it bypass the strict radius filter so it's not permanently hidden.
         return { ...centre, distance: null };
       });
 
-      // Filter by radius
-      result = result.filter(centre => centre.distance === null || centre.distance <= radius);
+      // Filter by radius (allow centres with no distance to show up if they matched text searches)
+      result = result.filter(c => c.distance === null || c.distance <= radius);
+      
+      // Sort by distance
+      result.sort((a, b) => {
+        if (a.distance === null) return 1;
+        if (b.distance === null) return -1;
+        return a.distance - b.distance;
+      });
     }
 
     // 5. Sorting
@@ -136,7 +206,78 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
     }
 
     return result;
-  }, [initialCentres, userLocation, radius, searchQuery, selectedSubjects, selectedMode, maxFee, sortOrder]);
+  }, [allCentres, userLocation, radius, searchQuery, selectedSubjects, selectedMode, maxFee, sortOrder]);
+
+  // Trigger auto-crawl if 0 results
+  useEffect(() => {
+    async function triggerCrawl() {
+      if (userLocation && locationName && processedCentres.length === 0 && !isCrawling && !hasCrawled) {
+        setIsCrawling(true);
+        setHasCrawled(true); // Prevent multiple triggers for the same search
+        setCrawlMessage("Searching Google Maps for tuition centres...");
+        
+        try {
+          const res = await fetch(`/api/crawl/ondemand?address=${encodeURIComponent(locationName)}`);
+          const data = await res.json();
+          
+          if (data.newCentres && data.newCentres.length > 0) {
+            setAllCentres(prev => [...prev, ...data.newCentres]);
+            
+            // Check if active filters will hide the new centres
+            // By doing a quick mock check against the first new centre
+            const q = searchQuery.toLowerCase();
+            const hasCoords = searchParams.has("lat") && searchParams.has("lng");
+            const addrText = !hasCoords ? searchParams.get("address") : null;
+            const addrQ = addrText?.toLowerCase() || "";
+            const searchTerms = [q, addrQ].filter(Boolean);
+            
+            let someVisible = false;
+            for (const c of data.newCentres) {
+               // roughly check if it passes text + subject filters
+               const passesText = searchTerms.length === 0 || searchTerms.some(term => 
+                 c.name?.toLowerCase().includes(term) || c.subjects?.some((s: string) => s.toLowerCase().includes(term)) || c.location?.toLowerCase().includes(term)
+               );
+               const passesSubject = selectedSubjects.length === 0 || selectedSubjects.some(sub => c.subjects?.includes(sub));
+               
+               if (passesText && passesSubject) {
+                 someVisible = true;
+                 break;
+               }
+            }
+            
+            if (!someVisible && (searchQuery.trim() || selectedSubjects.length > 0)) {
+               setCrawlMessage(`Found ${data.newCentres.length} centres, but they were hidden by your filters (e.g. they don't teach ${searchQuery || selectedSubjects.join(", ")}). Remove filters to see them!`);
+            } else {
+               setCrawlMessage(`Found ${data.newCentres.length} new centres! Updating...`);
+            }
+
+            setTimeout(() => {
+              setIsCrawling(false);
+            }, 3000);
+          } else {
+            setCrawlMessage("No new centres found online.");
+            setTimeout(() => setIsCrawling(false), 2000);
+          }
+        } catch (e) {
+          console.error(e);
+          setCrawlMessage("Failed to search online.");
+          setTimeout(() => setIsCrawling(false), 2000);
+        }
+      }
+    }
+    triggerCrawl();
+  }, [userLocation, locationName, processedCentres.length, isCrawling, hasCrawled]);
+
+  // Pagination Logic
+  const rawPage = parseInt(searchParams.get("page") || "1");
+  const limit = 10;
+  const totalPages = Math.max(1, Math.ceil(processedCentres.length / limit));
+  const page = Math.min(rawPage, totalPages);
+  
+  const paginatedCentres = useMemo(() => {
+    const startIndex = (page - 1) * limit;
+    return processedCentres.slice(startIndex, startIndex + limit);
+  }, [processedCentres, page, limit]);
 
   return (
     <div className="flex-1 bg-slate-50 dark:bg-slate-950 min-h-screen">
@@ -211,8 +352,8 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
                     </div>
                     <Slider 
                       value={[radius]} 
-                      onValueChange={(val) => setRadius((val as number[])[0])} 
-                      max={50} 
+                      onValueChange={(val) => setRadius(Array.isArray(val) ? val[0] : val)} 
+                      max={100} 
                       min={1}
                       step={1} 
                       className="w-full" 
@@ -227,7 +368,7 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
                 {/* Subjects */}
                 <div className="space-y-3">
                   <h4 className="text-sm font-medium text-slate-900 dark:text-white">Subjects</h4>
-                  {["Mathematics", "Science", "English", "Physics", "Chemistry"].map(subject => (
+                  {dynamicSubjects.map(subject => (
                     <label key={subject} className="flex items-center gap-3 cursor-pointer group">
                       <div className="w-5 h-5 rounded border border-slate-300 dark:border-slate-600 group-hover:border-indigo-500 flex items-center justify-center transition-colors">
                         <div className={`w-3 h-3 rounded-sm bg-indigo-500 transition-opacity ${selectedSubjects.includes(subject) ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`} />
@@ -272,10 +413,10 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
                 {/* Price Range */}
                 <div className="space-y-4">
                   <h4 className="text-sm font-medium text-slate-900 dark:text-white">Max Monthly Fee</h4>
-                  <Slider defaultValue={[300]} max={500} step={10} className="w-full" />
+                  <Slider value={[maxFee]} onValueChange={(val) => setMaxFee(Array.isArray(val) ? val[0] : val)} max={500} step={10} className="w-full" />
                   <div className="flex justify-between text-xs text-slate-500 font-medium">
-                    <span>RM 50</span>
-                    <span>RM 500+</span>
+                    <span>RM 0</span>
+                    <span>RM {maxFee}</span>
                   </div>
                 </div>
               </div>
@@ -297,14 +438,37 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
               </select>
             </div>
 
-            {processedCentres.length === 0 && (
-              <div className="text-center py-12 text-slate-500">
-                No centres found matching your criteria.
+            {isCrawling && (
+              <div className="flex flex-col items-center justify-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 shadow-sm mb-8">
+                <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" />
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">Automated Web Crawler Active</h3>
+                <p className="text-slate-500 dark:text-slate-400">{crawlMessage}</p>
+                <div className="w-64 h-2 bg-slate-100 dark:bg-slate-800 rounded-full mt-6 overflow-hidden">
+                  <div className="h-full bg-indigo-500 rounded-full animate-[progress_2s_ease-in-out_infinite]" style={{ width: '50%' }}></div>
+                </div>
               </div>
             )}
 
-            <div className="grid md:grid-cols-2 gap-6">
-              {processedCentres.map((centre: any) => (
+            {!isCrawling && processedCentres.length === 0 && (
+              <div className="text-center py-16 text-slate-500 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm mb-8">
+                <p className="text-lg font-medium text-slate-900 dark:text-white mb-4">No centres found matching your exact criteria.</p>
+                <Button 
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSelectedSubjects([]);
+                    setSelectedMode("All");
+                    setMaxFee(500);
+                    setRadius(50);
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md"
+                >
+                  Clear All Filters
+                </Button>
+              </div>
+            )}
+
+            <div className="grid md:grid-cols-2 gap-6 mb-8">
+              {paginatedCentres.map((centre: any) => (
                 <Card key={centre.id} className="group overflow-hidden rounded-2xl border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:border-indigo-500/30 transition-all duration-300 flex flex-col">
                   {/* Image/Gradient Header */}
                   <div 
@@ -380,6 +544,15 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
                 </Card>
               ))}
             </div>
+
+            {processedCentres.length > 0 && (
+              <PaginationControls 
+                currentPage={page} 
+                totalPages={totalPages} 
+                hasNextPage={page < totalPages} 
+                hasPrevPage={page > 1} 
+              />
+            )}
             
           </div>
         </div>

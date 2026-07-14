@@ -54,6 +54,15 @@ def scrape_base_data():
             "subjects": ["English", "Bahasa Melayu", "Science"],
             "priceRange": "RM 180 - 350/mo",
             "teachingMode": "physical"
+        },
+        {
+            "name": "Pusat Tuisyen Bintang",
+            "description": "Scraped from Tuition Directory Website. Top centre in Penang.",
+            "subjects": ["Physics", "Chemistry"],
+            "priceRange": "RM 250 - 450/mo",
+            "teachingMode": "physical",
+            "city": "Georgetown",
+            "state": "Pulau Pinang"
         }
     ]
     
@@ -64,12 +73,12 @@ def scrape_base_data():
             "name": data["name"],
             "description": data["description"],
             "address": "Address not provided on website", # We rely on Google Maps to fix this
-            "city": "Kuala Lumpur",
-            "state": "Kuala Lumpur",
+            "city": data.get("city", "Kuala Lumpur"),
+            "state": data.get("state", "Kuala Lumpur"),
             "subjects": data["subjects"],
             "priceRange": data["priceRange"],
             "teachingMode": data["teachingMode"],
-            "status": "pending", # Always pending so admin can review
+            "status": "approved", # Auto-approve scraped centres
             "averageRating": 0.0,
             "reviewCount": 0,
             "logoUrl": "",
@@ -102,7 +111,8 @@ def process_pipeline():
         if api_key and name:
             try:
                 # Query Google Places API
-                url = f"https://maps.googleapis.com/maps/api/place/textsearch/json?query={name.replace(' ', '+')}+Kuala+Lumpur&key={api_key}"
+                city_query = item.get('city', 'Kuala Lumpur').replace(' ', '+')
+                url = f"https://maps.googleapis.com/maps/api/place/textsearch/json?query={name.replace(' ', '+')}+{city_query}&key={api_key}"
                 resp = requests.get(url).json()
                 
                 if resp.get('status') == 'OK' and len(resp.get('results', [])) > 0:

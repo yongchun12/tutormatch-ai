@@ -10,6 +10,7 @@ export interface IUser extends Document {
   maxPrice?: number;
   latitude?: number;
   longitude?: number;
+  savedCentres?: mongoose.Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,6 +27,7 @@ const UserSchema: Schema<IUser> = new Schema(
     // Optional coordinates so recommendations can score by distance.
     latitude: { type: Number },
     longitude: { type: Number },
+    savedCentres: [{ type: Schema.Types.ObjectId, ref: "TuitionCentre" }],
   },
   { timestamps: true }
 );

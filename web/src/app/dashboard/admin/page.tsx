@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Users, Database, ShieldCheck, Activity, BrainCircuit, Globe, LogOut, FileSearch, CheckCircle2, XCircle, SearchX } from "lucide-react";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
+import { Enquiry } from "@/models/Enquiry";
 import { approveCentreAction, rejectCentreAction } from "./actions";
 import ScrapeButton from "@/components/admin/ScrapeButton";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
@@ -26,50 +27,14 @@ export default async function AdminDashboard() {
   // Fetch pending centres scraped by the crawler
   const pendingCentres = await TuitionCentre.find({ status: "pending" }).sort({ createdAt: -1 }).lean();
 
-  return (
-    <div className="flex-1 bg-slate-50 dark:bg-slate-950 min-h-screen flex">
-      {/* Dashboard Sidebar */}
-      <div className="hidden md:flex w-64 flex-col bg-slate-900 border-r border-slate-800 p-6 space-y-6 text-slate-300">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center text-rose-400 font-bold">
-            <ShieldCheck className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="font-bold text-white leading-tight">{session.user.name || "System Admin"}</div>
-            <div className="text-xs text-slate-400">Master Control</div>
-          </div>
-        </div>
-        
-        <nav className="flex-1 space-y-2 mt-8">
-          <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-800 text-white font-medium">
-            <Activity className="w-5 h-5 text-rose-400" /> Platform Overview
-          </Link>
-          <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white font-medium transition-colors">
-            <Database className="w-5 h-5" /> Manage Centres
-          </Link>
-          <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white font-medium transition-colors">
-            <Users className="w-5 h-5" /> User Accounts
-          </Link>
-          <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white font-medium transition-colors">
-            <BrainCircuit className="w-5 h-5" /> AI Engine Status
-          </Link>
-          <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white font-medium transition-colors">
-            <Globe className="w-5 h-5" /> Web Scraper Logs
-          </Link>
-        </nav>
-        
-        <div>
-          <SidebarLogoutButton 
-            className="w-full justify-start text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-          />
-        </div>
-      </div>
+  // Fetch enquiries count
+  const totalEnquiriesCount = await Enquiry.countDocuments();
 
-      {/* Main Dashboard Content */}
-      <div className="flex-1 p-8 overflow-y-auto">
-        <div className="max-w-6xl mx-auto space-y-8">
-          
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+  return (
+    <div className="p-8">
+      <div className="max-w-6xl mx-auto space-y-8">
+        
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <h1 className="text-3xl font-heading font-bold text-slate-900 dark:text-white mb-2">Platform Administration</h1>
               <p className="text-slate-500 dark:text-slate-400">Monitor system health, AI sentiment analysis processing, and crawler status.</p>
@@ -109,6 +74,17 @@ export default async function AdminDashboard() {
                 </div>
                 <h3 className="text-2xl font-bold text-slate-900 dark:text-white">8,405</h3>
                 <p className="text-xs text-slate-500 mt-1 font-medium">By FastAPI ML Model</p>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl border-slate-200 dark:border-slate-800 shadow-sm">
+              <CardContent className="p-5">
+                <div className="flex justify-between items-center mb-2">
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Enquiries</p>
+                  <Activity className="w-4 h-4 text-rose-500" />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{totalEnquiriesCount}</h3>
+                <p className="text-xs text-rose-500 mt-1 font-medium">Across all centres</p>
               </CardContent>
             </Card>
 
@@ -175,8 +151,8 @@ export default async function AdminDashboard() {
             </Card>
 
             {/* AI Engine Logs */}
-            <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col h-full">
-              <CardHeader className="bg-slate-900 border-b border-slate-800 pb-4">
+            <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col h-full p-0 gap-0">
+              <CardHeader className="bg-slate-900 border-b border-slate-800 p-4 pb-4">
                 <div className="flex justify-between items-center">
                   <div>
                     <CardTitle className="font-heading text-lg text-white flex items-center gap-2">
@@ -188,23 +164,33 @@ export default async function AdminDashboard() {
                 </div>
               </CardHeader>
               <CardContent className="p-0 bg-slate-950 flex-1 relative h-64 overflow-hidden">
-                <div className="absolute inset-0 p-4 font-mono text-xs overflow-y-auto space-y-2">
-                  <div className="text-slate-400">[10:15:02] INFO: Processing batch of 45 new reviews...</div>
-                  <div className="text-emerald-400">[10:15:05] SUCCESS: Sentiment analysis complete. (Pos: 32, Neu: 8, Neg: 5)</div>
-                  <div className="text-slate-400">[10:17:22] INFO: Request received on /recommend endpoint for UserID: 1045</div>
-                  <div className="text-slate-400">[10:17:23] INFO: Loading collaborative filtering model weights...</div>
-                  <div className="text-emerald-400">[10:17:23] SUCCESS: Returned 5 recommendations. Latency: 124ms</div>
-                  <div className="text-slate-400">[10:22:14] INFO: Scheduled Scrapy job 'tuition_crawler_my' triggered.</div>
-                  <div className="text-amber-400">[10:22:15] WARN: Dynamic content detected. Falling back to Selenium driver.</div>
-                  <div className="text-slate-400">[10:25:30] INFO: Crawled 12 new listings from remote source.</div>
-                  <div className="text-emerald-400">[10:25:31] SUCCESS: Added 12 centres to Pending Approvals queue.</div>
+                <div className="absolute inset-0 p-4 font-mono text-xs overflow-y-auto space-y-3">
+                  <div className="flex flex-col"><span className="text-slate-500">[10:15:02] INFO:</span> <span className="text-slate-300">Processing batch of 45 new reviews...</span></div>
+                  <div className="flex flex-col"><span className="text-emerald-500">[10:15:05] SUCCESS:</span> <span className="text-emerald-300">Sentiment analysis complete. (Pos: 32, Neu: 8, Neg: 5)</span></div>
+                  <div className="flex flex-col"><span className="text-slate-500">[10:17:22] INFO:</span> <span className="text-slate-300">Request received on /recommend endpoint for UserID: 1045</span></div>
+                  <div className="flex flex-col"><span className="text-slate-500">[10:17:23] INFO:</span> <span className="text-slate-300">Loading collaborative filtering model weights...</span></div>
+                  <div className="flex flex-col"><span className="text-emerald-500">[10:17:23] SUCCESS:</span> <span className="text-emerald-300">Returned 5 recommendations. Latency: 124ms</span></div>
+                  <div className="flex flex-col"><span className="text-slate-500">[10:22:14] INFO:</span> <span className="text-slate-300">Scheduled Scrapy job 'tuition_crawler_my' triggered.</span></div>
+                  <div className="flex flex-col"><span className="text-amber-500">[10:22:15] WARN:</span> <span className="text-amber-300">Dynamic content detected. Falling back to Selenium driver.</span></div>
+                  <div className="flex flex-col"><span className="text-slate-500">[10:25:30] INFO:</span> <span className="text-slate-300">Crawled 12 new listings from remote source.</span></div>
+                  <div className="flex flex-col"><span className="text-emerald-500">[10:25:31] SUCCESS:</span> <span className="text-emerald-300">Added 12 centres to Pending Approvals queue.</span></div>
+                  <div className="flex flex-col"><span className="text-slate-500">[10:30:12] INFO:</span> <span className="text-slate-300">Retraining recommendation model with new interactions...</span></div>
+                  <div className="flex flex-col"><span className="text-slate-500">[10:32:05] INFO:</span> <span className="text-slate-300">Epoch 10/10 complete. Loss: 0.041</span></div>
+                  <div className="flex flex-col"><span className="text-emerald-500">[10:32:06] SUCCESS:</span> <span className="text-emerald-300">Model weights updated in registry.</span></div>
+                  <div className="flex flex-col"><span className="text-slate-500">[10:45:00] INFO:</span> <span className="text-slate-300">Health check ping from load balancer.</span></div>
+                  <div className="flex flex-col"><span className="text-emerald-500">[10:45:01] SUCCESS:</span> <span className="text-emerald-300">Status 200 OK.</span></div>
+                  <div className="flex flex-col"><span className="text-slate-500">[11:00:22] INFO:</span> <span className="text-slate-300">Request received on /recommend endpoint for UserID: 2011</span></div>
+                  <div className="flex flex-col"><span className="text-emerald-500">[11:00:23] SUCCESS:</span> <span className="text-emerald-300">Returned 10 recommendations. Latency: 98ms</span></div>
+                  <div className="flex flex-col"><span className="text-slate-500">[11:05:14] INFO:</span> <span className="text-slate-300">Background task: indexing text for search engine.</span></div>
+                  <div className="flex flex-col"><span className="text-slate-500">[11:10:30] INFO:</span> <span className="text-slate-300">Indexed 15,200 documents.</span></div>
+                  <div className="flex flex-col"><span className="text-amber-500">[11:10:31] WARN:</span> <span className="text-amber-300">Memory usage at 85%. Triggering garbage collection.</span></div>
+                  <div className="flex flex-col"><span className="text-emerald-500">[11:10:35] SUCCESS:</span> <span className="text-emerald-300">Memory usage returned to 45%.</span></div>
                 </div>
               </CardContent>
             </Card>
           </div>
 
         </div>
-      </div>
     </div>
   );
 }
