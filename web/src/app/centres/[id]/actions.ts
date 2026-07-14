@@ -115,7 +115,9 @@ export async function toggleSaveCentreAction(centreId: string) {
         }
 
         const savedCentres = user.savedCentres || [];
-        const index = savedCentres.indexOf(centreId as any);
+        // Map to strings to find index
+        const savedStrings = savedCentres.map((id: any) => id.toString());
+        const index = savedStrings.indexOf(centreId);
 
         let isSaved = false;
         if (index > -1) {

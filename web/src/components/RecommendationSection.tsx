@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { StudentLead } from "@/models/StudentLead";
+import { Review } from "@/models/Review";
 import { aiService } from "@/services/aiService";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -55,15 +56,30 @@ export default async function RecommendationSection() {
         .sort({ averageRating: -1, reviewCount: -1 })
         .limit(4)
         .lean();
+        
+      const allReviews = await Review.find({}).lean();
 
-      recommendedCentres = topCentres.map((c: any) => ({
-        centre_id: c._id.toString(),
-        name: c.name,
-        location: `${c.city}, ${c.state}`,
-        average_rating: c.averageRating,
-        review_count: c.reviewCount,
-        subjects: c.subjects
-      }));
+      recommendedCentres = topCentres.map((c: any) => {
+        const centreReviews = allReviews.filter(r => r.centreId.toString() === c._id.toString()).length;
+        return {
+          centre_id: c._id.toString(),
+          name: c.name,
+          location: `${c.city}, ${c.state}`,
+          average_rating: c.averageRating,
+          review_count: c.reviewCount || centreReviews,
+          subjects: c.subjects
+        };
+      });
+    } else {
+      // If AI recommends them, we still need local review count
+      const allReviews = await Review.find({}).lean();
+      recommendedCentres = recommendedCentres.map(c => {
+        const centreReviews = allReviews.filter(r => r.centreId.toString() === c.centre_id).length;
+        return {
+          ...c,
+          review_count: c.review_count || centreReviews
+        };
+      });
     }
 
   } catch (error) {

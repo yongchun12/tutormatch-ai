@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { Sparkles, Heart, BookOpen, Settings } from "lucide-react";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
+import { SessionProviderWrapper } from "@/components/providers/SessionProviderWrapper";
 import dbConnect from "@/lib/db";
 import { User } from "@/models/User";
 
@@ -42,7 +43,7 @@ export default async function StudentLayout({
           <Link href="/dashboard/student" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <Sparkles className="w-5 h-5" /> Recommendations
           </Link>
-          <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
+          <Link href="/dashboard/student/saved" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <Heart className="w-5 h-5" /> Saved Centres
           </Link>
           <Link href="/dashboard/student/enquiries" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
@@ -60,7 +61,9 @@ export default async function StudentLayout({
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto">
-        {children}
+        <SessionProviderWrapper>
+          {children}
+        </SessionProviderWrapper>
       </div>
     </div>
   );

@@ -62,6 +62,17 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
     }
   }, [searchParams]);
 
+  // Dynamic Subjects from loaded directory
+  const dynamicSubjects = useMemo(() => {
+    const subjectsSet = new Set<string>();
+    allCentres.forEach(c => {
+      if (Array.isArray(c.subjects)) {
+        c.subjects.forEach((sub: string) => subjectsSet.add(sub));
+      }
+    });
+    return Array.from(subjectsSet).sort();
+  }, [allCentres]);
+
   const handleGetLocation = () => {
     setIsLocating(true);
     setLocationError("");
@@ -73,12 +84,22 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
     }
 
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserLocation({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude
-        });
-        setLocationName("Your GPS Location");
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setUserLocation({ lat, lng });
+        
+        try {
+          const res = await fetch(`/api/location/geocode?lat=${lat}&lng=${lng}`);
+          const data = await res.json();
+          if (data.address) {
+            setLocationName(data.address);
+          } else {
+            setLocationName("Your GPS Location");
+          }
+        } catch (e) {
+          setLocationName("Your GPS Location");
+        }
         setIsLocating(false);
       },
       (error) => {
@@ -145,17 +166,25 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
 
     // 4. Location Radius & Distance
     if (userLocation) {
-      // Calculate distances
       result = result.map(centre => {
         if (centre.latitude && centre.longitude) {
           const dist = calculateDistance(userLocation.lat, userLocation.lng, centre.latitude, centre.longitude);
           return { ...centre, distance: dist };
         }
+        // If a centre has no coordinates, we cannot compute distance.
+        // We set it to null and let it bypass the strict radius filter so it's not permanently hidden.
         return { ...centre, distance: null };
       });
 
-      // Filter by radius. Exclude centres without coordinates when doing a location search.
-      result = result.filter(centre => centre.distance !== null && centre.distance <= radius);
+      // Filter by radius (allow centres with no distance to show up if they matched text searches)
+      result = result.filter(c => c.distance === null || c.distance <= radius);
+      
+      // Sort by distance
+      result.sort((a, b) => {
+        if (a.distance === null) return 1;
+        if (b.distance === null) return -1;
+        return a.distance - b.distance;
+      });
     }
 
     // 5. Sorting
@@ -192,11 +221,39 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
           const data = await res.json();
           
           if (data.newCentres && data.newCentres.length > 0) {
-            setCrawlMessage(`Found ${data.newCentres.length} new centres! Updating...`);
+            setAllCentres(prev => [...prev, ...data.newCentres]);
+            
+            // Check if active filters will hide the new centres
+            // By doing a quick mock check against the first new centre
+            const q = searchQuery.toLowerCase();
+            const hasCoords = searchParams.has("lat") && searchParams.has("lng");
+            const addrText = !hasCoords ? searchParams.get("address") : null;
+            const addrQ = addrText?.toLowerCase() || "";
+            const searchTerms = [q, addrQ].filter(Boolean);
+            
+            let someVisible = false;
+            for (const c of data.newCentres) {
+               // roughly check if it passes text + subject filters
+               const passesText = searchTerms.length === 0 || searchTerms.some(term => 
+                 c.name?.toLowerCase().includes(term) || c.subjects?.some((s: string) => s.toLowerCase().includes(term)) || c.location?.toLowerCase().includes(term)
+               );
+               const passesSubject = selectedSubjects.length === 0 || selectedSubjects.some(sub => c.subjects?.includes(sub));
+               
+               if (passesText && passesSubject) {
+                 someVisible = true;
+                 break;
+               }
+            }
+            
+            if (!someVisible && (searchQuery.trim() || selectedSubjects.length > 0)) {
+               setCrawlMessage(`Found ${data.newCentres.length} centres, but they were hidden by your filters (e.g. they don't teach ${searchQuery || selectedSubjects.join(", ")}). Remove filters to see them!`);
+            } else {
+               setCrawlMessage(`Found ${data.newCentres.length} new centres! Updating...`);
+            }
+
             setTimeout(() => {
-              setAllCentres(prev => [...prev, ...data.newCentres]);
               setIsCrawling(false);
-            }, 1000);
+            }, 3000);
           } else {
             setCrawlMessage("No new centres found online.");
             setTimeout(() => setIsCrawling(false), 2000);
@@ -311,7 +368,7 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
                 {/* Subjects */}
                 <div className="space-y-3">
                   <h4 className="text-sm font-medium text-slate-900 dark:text-white">Subjects</h4>
-                  {["Mathematics", "Science", "English", "Physics", "Chemistry"].map(subject => (
+                  {dynamicSubjects.map(subject => (
                     <label key={subject} className="flex items-center gap-3 cursor-pointer group">
                       <div className="w-5 h-5 rounded border border-slate-300 dark:border-slate-600 group-hover:border-indigo-500 flex items-center justify-center transition-colors">
                         <div className={`w-3 h-3 rounded-sm bg-indigo-500 transition-opacity ${selectedSubjects.includes(subject) ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`} />
@@ -393,8 +450,20 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
             )}
 
             {!isCrawling && processedCentres.length === 0 && (
-              <div className="text-center py-12 text-slate-500">
-                No centres found matching your criteria.
+              <div className="text-center py-16 text-slate-500 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm mb-8">
+                <p className="text-lg font-medium text-slate-900 dark:text-white mb-4">No centres found matching your exact criteria.</p>
+                <Button 
+                  onClick={() => {
+                    setSearchQuery("");
+                    setSelectedSubjects([]);
+                    setSelectedMode("All");
+                    setMaxFee(500);
+                    setRadius(50);
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md"
+                >
+                  Clear All Filters
+                </Button>
               </div>
             )}
 

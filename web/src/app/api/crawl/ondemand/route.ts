@@ -77,12 +77,30 @@ export async function GET(req: NextRequest) {
 
     const newCentres: any[] = [];
 
-    // 3. Process results
-    for (const place of data.results) {
+    // 3. Process results concurrently to fetch Place Details quickly
+    const placesWithDetails = await Promise.all(data.results.map(async (place: any) => {
+      let reviewsText = "";
+      if (place.place_id) {
+        try {
+          const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place.place_id}&fields=reviews&key=${apiKey}`;
+          const detailsRes = await fetch(detailsUrl);
+          const detailsData = await detailsRes.json();
+          if (detailsData.result?.reviews) {
+            reviewsText = detailsData.result.reviews.map((r: any) => r.text).join(" ");
+          }
+        } catch (e) {
+          console.error("Failed to fetch details for", place.name);
+        }
+      }
+      return { ...place, reviewsText };
+    }));
+
+    for (const place of placesWithDetails) {
       const name = place.name;
       
-      // Smart extraction
-      const deducedSubjects = extractSubjectsFromName(name);
+      // Smart extraction (Combine Name + Reviews)
+      const combinedText = `${name} ${place.reviewsText}`;
+      const deducedSubjects = extractSubjectsFromName(combinedText);
       
       // Parse city/state from formatted address roughly
       const addrParts = (place.formatted_address || "").split(",");
@@ -112,7 +130,34 @@ export async function GET(req: NextRequest) {
         if (!existing.logoUrl && logoUrl) {
            existing.logoUrl = logoUrl;
         }
+        if (!existing.subjects || existing.subjects.length === 0) {
+           if (deducedSubjects.length > 0) {
+             existing.subjects = deducedSubjects;
+             existing.markModified('subjects');
+           }
+        }
+        if (!existing.googlePlaceId && place.place_id) {
+           existing.googlePlaceId = place.place_id;
+        }
         await existing.save();
+        
+        // Return existing updated record to the frontend so it appears in real-time
+        newCentres.push({
+           id: existing._id.toString(),
+           name: existing.name,
+           description: existing.description,
+           location: `${existing.city}, ${existing.state}`,
+           rating: existing.averageRating,
+           reviews: existing.reviewCount,
+           subjects: existing.subjects,
+           price: existing.priceRange,
+           mode: existing.teachingMode,
+           aiMatch: null,
+           image: existing.logoUrl || null,
+           gradient: getGradient(existing._id.toString()),
+           latitude: existing.latitude,
+           longitude: existing.longitude,
+        });
       } else {
         // Create new
         const newRecord = await TuitionCentre.create({
@@ -128,6 +173,7 @@ export async function GET(req: NextRequest) {
           averageRating: place.rating || 0,
           reviewCount: place.user_ratings_total || 0,
           logoUrl: logoUrl || undefined,
+          googlePlaceId: place.place_id,
           latitude: place.geometry?.location?.lat,
           longitude: place.geometry?.location?.lng,
           location: place.geometry?.location?.lat ? {

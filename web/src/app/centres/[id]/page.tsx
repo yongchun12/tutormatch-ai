@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { MapPin, Star, Clock, CheckCircle2, TrendingUp, MessageSquare, ArrowLeft, Heart, ShieldCheck, ThumbsUp, ThumbsDown, Minus, Sparkles, BookOpen } from "lucide-react";
+import { MapPin, Star, Clock, CheckCircle2, TrendingUp, MessageSquare, ArrowLeft, Heart, ShieldCheck, ThumbsUp, ThumbsDown, Minus, Sparkles, BookOpen, Phone, Globe, Mail } from "lucide-react";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { Review } from "@/models/Review";
@@ -60,15 +60,45 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
         name: rawCentre.name,
         description: rawCentre.description,
         location: `${rawCentre.city}, ${rawCentre.state}`,
-        rating: rawCentre.averageRating || 4.5,
-        reviews: reviewsList.length,
+        rating: rawCentre.averageRating || 0,
+        reviews: reviewsList.length > 0 ? reviewsList.length : (rawCentre.reviewCount || 0),
         subjects: rawCentre.subjects,
         price: rawCentre.priceRange,
         mode: rawCentre.teachingMode.charAt(0).toUpperCase() + rawCentre.teachingMode.slice(1),
         logoUrl: rawCentre.logoUrl || null,
         latitude: rawCentre.latitude,
         longitude: rawCentre.longitude,
+        googlePlaceId: rawCentre.googlePlaceId,
+        contactNumber: rawCentre.contactNumber,
+        website: rawCentre.website,
+        email: rawCentre.email,
+        ownerId: rawCentre.ownerId,
       };
+      
+      // Fetch Google Reviews dynamically if available
+      if (rawCentre.googlePlaceId) {
+        try {
+          const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+          if (apiKey) {
+            const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${rawCentre.googlePlaceId}&fields=reviews&key=${apiKey}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data.result?.reviews) {
+              const googleReviews = data.result.reviews.map((r: any) => ({
+                id: `google-${r.time}`,
+                name: r.author_name || "Google User",
+                score: r.rating >= 4 ? "positive" : (r.rating <= 2 ? "negative" : "neutral"), // Simple AI proxy for Google
+                text: r.text,
+                rating: r.rating
+              }));
+              reviewsList = [...reviewsList, ...googleReviews];
+              centre.reviews = reviewsList.length;
+            }
+          }
+        } catch (e) {
+          console.error("Failed to fetch Google reviews:", e);
+        }
+      }
 
       // If we have real reviews, recalculate the AI summary percentages dynamically!
       if (reviewsList.length > 0) {
@@ -317,6 +347,58 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
           {/* Right Column (Sticky Sidebar) */}
           <div className="hidden lg:block relative">
             <div className="sticky top-24 space-y-6">
+              {/* Contact Information Block */}
+              {(centre.contactNumber || centre.website || centre.email) && (
+                <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900">
+                  <CardHeader>
+                    <CardTitle className="font-heading text-lg">Contact Information</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {centre.contactNumber && (
+                      <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
+                        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                          <Phone className="w-4 h-4 text-indigo-500" />
+                        </div>
+                        <span className="font-medium text-sm">{centre.contactNumber}</span>
+                      </div>
+                    )}
+                    {centre.email && (
+                      <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
+                        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                          <Mail className="w-4 h-4 text-indigo-500" />
+                        </div>
+                        <a href={`mailto:${centre.email}`} className="font-medium text-sm hover:text-indigo-600 transition-colors">{centre.email}</a>
+                      </div>
+                    )}
+                    {centre.website && (
+                      <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
+                        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                          <Globe className="w-4 h-4 text-indigo-500" />
+                        </div>
+                        <a href={centre.website.startsWith('http') ? centre.website : `https://${centre.website}`} target="_blank" rel="noopener noreferrer" className="font-medium text-sm text-indigo-600 hover:underline truncate">
+                          {centre.website.replace(/^https?:\/\//, '')}
+                        </a>
+                      </div>
+                    )}
+
+                    {centre.contactNumber && (
+                      <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
+                        <a 
+                          href={`https://wa.me/${centre.contactNumber.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hi! I found ${centre.name} on the Tuition Centre Directory and would like to enquire about your classes.`)}`}
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="w-full"
+                        >
+                          <Button className="w-full bg-[#25D366] hover:bg-[#128C7E] text-white rounded-xl shadow-md font-bold">
+                            <MessageSquare className="w-4 h-4 mr-2" /> Chat on WhatsApp
+                          </Button>
+                        </a>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none bg-white dark:bg-slate-900">
                 <CardHeader>
                   <CardTitle className="font-heading">Enquire Now</CardTitle>
