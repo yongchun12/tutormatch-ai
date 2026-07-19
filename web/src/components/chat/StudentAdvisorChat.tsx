@@ -107,6 +107,11 @@ export function StudentAdvisorChat() {
                 </div>
               </div>
             )}
+            {chat.error && (
+              <div className="p-3 mb-2 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm">
+                <strong>Error:</strong> {chat.error.message || "An unexpected error occurred."}
+              </div>
+            )}
             
             <div ref={messagesEndRef} />
           </div>
