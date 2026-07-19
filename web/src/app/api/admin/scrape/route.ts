@@ -35,8 +35,24 @@ export async function GET(req: Request) {
       // CRITICAL FIX: Extract the actual review count from Google Maps!
       const reviewCount = place.user_ratings_total || 0;
       
-      const city = address.includes("Kuala Lumpur") ? "Kuala Lumpur" : "Petaling Jaya";
-      const state = address.includes("Selangor") ? "Selangor" : "Kuala Lumpur";
+      // Parse State from Address
+      const malaysianStates = ["Johor", "Kedah", "Kelantan", "Melaka", "Negeri Sembilan", "Pahang", "Perak", "Perlis", "Penang", "Pulau Pinang", "Sabah", "Sarawak", "Selangor", "Terengganu", "Kuala Lumpur", "Putrajaya", "Labuan"];
+      
+      let state = "Kuala Lumpur"; // Default fallback
+      for (const s of malaysianStates) {
+          if (address.toLowerCase().includes(s.toLowerCase())) {
+              state = s === "Pulau Pinang" ? "Penang" : s;
+              break;
+          }
+      }
+      
+      // If we searched for a specific state (e.g. Johor) and didn't find it in the address, assume it's the queried state
+      if (locationQuery !== "Malaysia" && state === "Kuala Lumpur" && !address.toLowerCase().includes("kuala lumpur")) {
+          state = locationQuery;
+      }
+
+      // Simple city extraction (getting the word before the state or postcode if possible, else just use the state name)
+      const city = state; // Fallback city to state for simplicity, or we can extract properly later
 
       let logoUrl = "";
       if (place.photos && place.photos.length > 0) {
