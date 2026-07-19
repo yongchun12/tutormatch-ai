@@ -112,7 +112,10 @@ export default async function AdminReviewsPage(props: {
                                             )}
                                         </td>
                                         <td className="px-6 py-4 text-right align-top">
-                                            <form action={adminDeleteReviewAction.bind(null, review._id.toString())}>
+                                            <form action={async (formData) => {
+                                                "use server";
+                                                await adminDeleteReviewAction(review._id.toString(), formData);
+                                            }}>
                                                 <Button type="submit" size="sm" variant="outline" className="h-8 px-2 text-rose-500 border-rose-200 hover:bg-rose-50 dark:border-rose-900/50 dark:hover:bg-rose-950/30">
                                                     <Trash2 className="w-4 h-4 mr-1" /> Delete
                                                 </Button>

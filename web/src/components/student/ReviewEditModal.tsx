@@ -41,7 +41,7 @@ export default function ReviewEditModal({ reviewId, initialRating, initialCommen
   return (
     <div className="flex items-center gap-2">
         <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
+        <DialogTrigger>
             <Button size="sm" variant="outline" className="h-8 px-2 text-indigo-600 border-indigo-200 hover:bg-indigo-50 dark:text-indigo-400 dark:border-indigo-900/50 dark:hover:bg-indigo-950/30">
                 <Edit className="w-4 h-4 mr-1" /> Edit
             </Button>

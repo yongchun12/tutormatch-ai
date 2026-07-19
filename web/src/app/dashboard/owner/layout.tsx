@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { Building2, MessageSquare, PlusCircle, Settings, Users } from "lucide-react";
+import { Building2, MessageSquare, PlusCircle, Settings, Users, Star } from "lucide-react";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
 import dbConnect from "@/lib/db";
 import { User } from "@/models/User";
