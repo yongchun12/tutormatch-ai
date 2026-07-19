@@ -8,6 +8,7 @@ export interface IUser extends Document {
   subjectsNeeded?: string[];
   preferredLocation?: string;
   maxPrice?: number;
+  maxDistanceKm?: number;
   latitude?: number;
   longitude?: number;
   savedCentres?: mongoose.Types.ObjectId[];
@@ -24,6 +25,7 @@ const UserSchema: Schema<IUser> = new Schema(
     subjectsNeeded: { type: [String] },
     preferredLocation: { type: String },
     maxPrice: { type: Number },
+    maxDistanceKm: { type: Number, default: 25 },
     // Optional coordinates so recommendations can score by distance.
     latitude: { type: Number },
     longitude: { type: Number },

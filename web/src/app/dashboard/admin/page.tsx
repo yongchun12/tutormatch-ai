@@ -11,6 +11,8 @@ import { TuitionCentre } from "@/models/TuitionCentre";
 import { Enquiry } from "@/models/Enquiry";
 import { SystemLog } from "@/models/SystemLog";
 import { ClaimRequest } from "@/models/ClaimRequest";
+import { User } from "@/models/User";
+import { Review } from "@/models/Review";
 import { approveCentreAction, rejectCentreAction, verifyCentreAction, approveClaimRequestAction, rejectClaimRequestAction } from "./actions";
 import ScrapeButton from "@/components/admin/ScrapeButton";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
@@ -25,6 +27,8 @@ export default async function AdminDashboard() {
 
   // Fetch real statistics
   const activeCentresCount = await TuitionCentre.countDocuments({ status: "approved" });
+  const totalUsersCount = await User.countDocuments();
+  const totalReviewsCount = await Review.countDocuments();
   
   // Fetch pending centres scraped by the crawler
   const pendingCentres = await TuitionCentre.find({ status: "pending" }).sort({ createdAt: -1 }).lean();
@@ -65,8 +69,8 @@ export default async function AdminDashboard() {
                   <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Users</p>
                   <Users className="w-4 h-4 text-blue-500" />
                 </div>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">1,492</h3>
-                <p className="text-xs text-emerald-600 mt-1 font-medium">+142 this month</p>
+                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{totalUsersCount}</h3>
+                <p className="text-xs text-emerald-600 mt-1 font-medium">Registered Platform Users</p>
               </CardContent>
             </Card>
 
@@ -87,7 +91,7 @@ export default async function AdminDashboard() {
                   <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Reviews Analyzed</p>
                   <BrainCircuit className="w-4 h-4 text-violet-500" />
                 </div>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">8,405</h3>
+                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{totalReviewsCount}</h3>
                 <p className="text-xs text-slate-500 mt-1 font-medium">By FastAPI ML Model</p>
               </CardContent>
             </Card>

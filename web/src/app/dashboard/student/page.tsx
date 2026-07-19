@@ -44,7 +44,7 @@ export default async function StudentDashboard() {
     subjects_needed: subjectsNeeded,
     user_lat: user.latitude,
     user_lng: user.longitude,
-    max_distance_km: 25,
+    max_distance_km: user.maxDistanceKm || 25,
   };
 
   // Pull the approved centres from our database and hand them to the Python

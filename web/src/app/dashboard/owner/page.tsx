@@ -37,6 +37,8 @@ export default async function OwnerDashboard() {
   let enquiries: any[] = [];
   let aiPos = 0;
   let totalReviews = 0;
+  let topPraises: string[] = [];
+  let areasForImprovement: string[] = [];
 
   if (myCentre) {
     // Fetch Enquiries for their centre
@@ -47,7 +49,14 @@ export default async function OwnerDashboard() {
     totalReviews = reviews.length;
     if (totalReviews > 0) {
       let posCount = 0;
-      reviews.forEach(r => { if (r.sentimentScore === "positive") posCount++ });
+      reviews.forEach(r => { 
+        if (r.sentimentScore === "positive") {
+          posCount++;
+          if (r.comment && topPraises.length < 2) topPraises.push(`"${r.comment}"`);
+        } else if (r.sentimentScore === "negative") {
+          if (r.comment && areasForImprovement.length < 2) areasForImprovement.push(`"${r.comment}"`);
+        }
+      });
       aiPos = Math.round((posCount / totalReviews) * 100);
     }
   }
@@ -64,9 +73,11 @@ export default async function OwnerDashboard() {
               <h1 className="text-3xl font-heading font-bold text-slate-900 dark:text-white mb-2">Centre Performance</h1>
               <p className="text-slate-500 dark:text-slate-400">Track your metrics, enquiries, and AI-driven review sentiments.</p>
             </div>
-            <Button className="hidden md:flex rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-violet-600 dark:hover:bg-violet-700">
-              Edit Centre Details
-            </Button>
+            <Link href="/dashboard/owner/centre">
+              <Button className="hidden md:flex rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-violet-600 dark:hover:bg-violet-700">
+                Edit Centre Details
+              </Button>
+            </Link>
           </div>
 
           {!myCentre ? (
@@ -148,28 +159,34 @@ export default async function OwnerDashboard() {
                   <CardContent className="p-6 flex-1 flex flex-col gap-6">
                     <div>
                       <h4 className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 mb-2 uppercase tracking-wider">Top Praises</h4>
-                      <ul className="space-y-2">
-                        <li className="text-sm text-slate-600 dark:text-slate-300 flex items-start gap-2">
-                          <span className="text-emerald-500 mt-0.5">•</span> "Teachers explain complex math concepts very clearly."
-                        </li>
-                        <li className="text-sm text-slate-600 dark:text-slate-300 flex items-start gap-2">
-                          <span className="text-emerald-500 mt-0.5">•</span> "Small class sizes help with individual attention."
-                        </li>
-                      </ul>
+                      {topPraises.length === 0 ? (
+                        <p className="text-sm text-slate-500 italic">No positive reviews yet.</p>
+                      ) : (
+                        <ul className="space-y-2">
+                          {topPraises.map((praise, idx) => (
+                            <li key={idx} className="text-sm text-slate-600 dark:text-slate-300 flex items-start gap-2">
+                              <span className="text-emerald-500 mt-0.5">•</span> {praise}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                     
                     <div className="w-full h-px bg-slate-100 dark:bg-slate-800" />
                     
                     <div>
                       <h4 className="text-sm font-semibold text-rose-600 dark:text-rose-400 mb-2 uppercase tracking-wider">Areas for Improvement</h4>
-                      <ul className="space-y-2">
-                        <li className="text-sm text-slate-600 dark:text-slate-300 flex items-start gap-2">
-                          <span className="text-rose-500 mt-0.5">•</span> "Parking is difficult to find around 6 PM."
-                        </li>
-                        <li className="text-sm text-slate-600 dark:text-slate-300 flex items-start gap-2">
-                          <span className="text-rose-500 mt-0.5">•</span> "Air conditioning in Room B is sometimes too cold."
-                        </li>
-                      </ul>
+                      {areasForImprovement.length === 0 ? (
+                        <p className="text-sm text-slate-500 italic">No negative reviews yet.</p>
+                      ) : (
+                        <ul className="space-y-2">
+                          {areasForImprovement.map((area, idx) => (
+                            <li key={idx} className="text-sm text-slate-600 dark:text-slate-300 flex items-start gap-2">
+                              <span className="text-rose-500 mt-0.5">•</span> {area}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                     
                     <div className="mt-auto pt-4">
@@ -293,9 +310,11 @@ export default async function OwnerDashboard() {
                               <p className="text-xs font-medium text-slate-400">
                                 {new Date(lead.createdAt).toLocaleDateString()}
                               </p>
-                              <Button className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform">
-                                Contact Student
-                              </Button>
+                              <Link href={`mailto:${student.email}`}>
+                                <Button className="rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 group-hover:scale-105 transition-transform">
+                                  Contact Student
+                                </Button>
+                              </Link>
                             </div>
                           </div>
                         );

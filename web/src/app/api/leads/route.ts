@@ -17,7 +17,7 @@ export async function POST(req: Request) {
 
     // 2. Parse payload
     const body = await req.json();
-    const { subject, location, wantsNewsletter, remark } = body;
+    const { subject, location, wantsNewsletter, remark, maxDistanceKm } = body;
 
     if (!subject || !location) {
       return NextResponse.json({ error: "Subject and location are required." }, { status: 400 });
@@ -54,11 +54,11 @@ export async function POST(req: Request) {
         if (mapData.status === "OK" && mapData.results.length > 0) {
           const lat = mapData.results[0].geometry.location.lat;
           const lng = mapData.results[0].geometry.location.lng;
-          
           await User.findByIdAndUpdate(userId, {
             latitude: lat,
             longitude: lng,
             preferredLocation: location,
+            maxDistanceKm: Number(maxDistanceKm) || 25,
             subjectsNeeded: subject.split(",").map((s: string) => s.trim())
           });
         } else {
@@ -94,11 +94,13 @@ export async function POST(req: Request) {
               latitude: matchedFallback.lat,
               longitude: matchedFallback.lng,
               preferredLocation: location,
+              maxDistanceKm: Number(maxDistanceKm) || 25,
               subjectsNeeded: subject.split(",").map((s: string) => s.trim())
             });
           } else {
             await User.findByIdAndUpdate(userId, {
               preferredLocation: location,
+              maxDistanceKm: Number(maxDistanceKm) || 25,
               subjectsNeeded: subject.split(",").map((s: string) => s.trim())
             });
           }
@@ -139,11 +141,13 @@ export async function POST(req: Request) {
             latitude: matchedFallback.lat,
             longitude: matchedFallback.lng,
             preferredLocation: location,
+            maxDistanceKm: Number(maxDistanceKm) || 25,
             subjectsNeeded: subject.split(",").map((s: string) => s.trim())
           });
         } else {
           await User.findByIdAndUpdate(userId, {
             preferredLocation: location,
+            maxDistanceKm: Number(maxDistanceKm) || 25,
             subjectsNeeded: subject.split(",").map((s: string) => s.trim())
           });
         }

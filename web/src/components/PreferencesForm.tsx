@@ -9,6 +9,7 @@ export default function PreferencesForm() {
   const router = useRouter();
   const [subject, setSubject] = useState("");
   const [location, setLocation] = useState("");
+  const [maxDistanceKm, setMaxDistanceKm] = useState(25);
   const [remark, setRemark] = useState("");
   const [wantsNewsletter, setWantsNewsletter] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -66,7 +67,7 @@ export default function PreferencesForm() {
       const res = await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, location, remark, wantsNewsletter }),
+        body: JSON.stringify({ subject, location, remark, wantsNewsletter, maxDistanceKm }),
       });
 
       const data = await res.json();
@@ -168,6 +169,27 @@ export default function PreferencesForm() {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 flex justify-between">
+          <span className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-indigo-500" /> Maximum Travel Distance
+          </span>
+          <span className="text-indigo-600 font-bold">{maxDistanceKm} km</span>
+        </label>
+        <input 
+          type="range" 
+          min="1" 
+          max="100" 
+          value={maxDistanceKm}
+          onChange={(e) => setMaxDistanceKm(Number(e.target.value))}
+          className="w-full accent-indigo-600"
+        />
+        <div className="flex justify-between text-xs text-slate-500">
+          <span>1 km</span>
+          <span>100 km</span>
+        </div>
       </div>
 
       <div className="space-y-2">

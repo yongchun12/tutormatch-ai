@@ -1,0 +1,132 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Save, Loader2 } from "lucide-react";
+import { updateCentreAction } from "@/app/dashboard/owner/centre/actions";
+
+interface CentreFormProps {
+  initialData: any;
+}
+
+export default function CentreForm({ initialData }: CentreFormProps) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState({ type: "", text: "" });
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setLoading(true);
+    setMessage({ type: "", text: "" });
+
+    const formData = new FormData(e.currentTarget);
+    const res = await updateCentreAction(initialData._id.toString(), formData);
+
+    if (res.error) {
+      setMessage({ type: "error", text: res.error });
+    } else {
+      setMessage({ type: "success", text: "Centre details updated successfully!" });
+      router.refresh();
+    }
+    setLoading(false);
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {message.text && (
+        <div className={`p-4 rounded-xl text-sm font-medium ${
+          message.type === "success" 
+            ? "bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800" 
+            : "bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-900/30 dark:border-rose-800"
+        }`}>
+          {message.text}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Centre Name</label>
+          <Input 
+            name="name" 
+            defaultValue={initialData.name} 
+            required 
+            className="dark:bg-slate-900"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Contact Number</label>
+          <Input 
+            name="contactNumber" 
+            defaultValue={initialData.contactNumber} 
+            className="dark:bg-slate-900"
+          />
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Description</label>
+          <Textarea 
+            name="description" 
+            defaultValue={initialData.description} 
+            rows={4}
+            className="dark:bg-slate-900"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">City</label>
+          <Input 
+            name="city" 
+            defaultValue={initialData.city} 
+            required
+            className="dark:bg-slate-900"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">State</label>
+          <Input 
+            name="state" 
+            defaultValue={initialData.state} 
+            required
+            className="dark:bg-slate-900"
+          />
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Full Address</label>
+          <Textarea 
+            name="location" 
+            defaultValue={initialData.location} 
+            rows={2}
+            className="dark:bg-slate-900"
+          />
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Subjects Offered (Comma separated)</label>
+          <Input 
+            name="subjects" 
+            defaultValue={initialData.subjects?.join(", ")} 
+            placeholder="e.g. Mathematics, Science, English"
+            className="dark:bg-slate-900"
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-800">
+        <Button 
+          type="submit" 
+          disabled={loading}
+          className="rounded-xl bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-500/20"
+        >
+          {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+          Save Changes
+        </Button>
+      </div>
+    </form>
+  );
+}
