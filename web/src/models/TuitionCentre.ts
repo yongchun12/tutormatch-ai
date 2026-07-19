@@ -28,6 +28,10 @@ export interface ITuitionCentre extends Document {
   };
   createdAt: Date;
   updatedAt: Date;
+  announcements?: {
+    content: string;
+    date: Date;
+  }[];
 }
 
 const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
@@ -65,6 +69,12 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
         required: false,
       },
     },
+    announcements: [
+      {
+        content: { type: String, required: true },
+        date: { type: Date, required: true },
+      },
+    ],
   },
   { timestamps: true }
 );

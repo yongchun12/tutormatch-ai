@@ -10,6 +10,7 @@ import { CheckCircle2, XCircle, Search, Database, Plus, Edit } from "lucide-reac
 import Link from "next/link";
 import { approveCentreAction, rejectCentreAction, deleteCentreAction } from "../actions";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { SyncButton } from "./SyncButton";
 
 export default async function ManageCentres(props: {
     searchParams: Promise<{ page?: string }>
@@ -97,6 +98,7 @@ export default async function ManageCentres(props: {
                                                     </Button>
                                                 </form>
                                             )}
+                                            <SyncButton centreId={centre._id.toString()} hasWebsite={!!centre.website} />
                                             <Link href={`/dashboard/admin/centres/${centre._id.toString()}/edit`}>
                                                 <Button size="sm" variant="outline" className="h-8 px-2 text-indigo-600 border-indigo-200 hover:bg-indigo-50 dark:text-indigo-400 dark:border-indigo-900/50 dark:hover:bg-indigo-950/30">
                                                     <Edit className="w-4 h-4 mr-1" /> Edit

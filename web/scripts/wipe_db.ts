@@ -9,8 +9,9 @@ const run = async () => {
 
   await mongoose.connect(MONGODB_URI);
   console.log("Connected. Wiping database...");
-  
-  await mongoose.connection.db.dropDatabase();
+  if (mongoose.connection.db) {
+    await mongoose.connection.db.dropDatabase();
+  }
   console.log("Database completely wiped!");
   process.exit(0);
 };

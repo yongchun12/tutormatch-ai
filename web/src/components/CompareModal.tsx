@@ -15,7 +15,9 @@ interface CompareModalProps {
 export default function CompareModal({ isOpen, setIsOpen, centres }: CompareModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+      <DialogContent className={`max-h-[90vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 transition-all ${
+        centres.length === 1 ? 'max-w-md' : centres.length === 2 ? 'max-w-3xl' : 'max-w-5xl'
+      }`}>
         <DialogHeader className="mb-4">
           <DialogTitle className="font-heading text-2xl text-slate-900 dark:text-white">
             Comparing {centres.length} Centres
@@ -25,7 +27,11 @@ export default function CompareModal({ isOpen, setIsOpen, centres }: CompareModa
         {centres.length === 0 ? (
           <div className="p-8 text-center text-slate-500">No centres selected.</div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+          <div className={`grid gap-6 ${
+            centres.length === 1 ? 'grid-cols-1' : 
+            centres.length === 2 ? 'grid-cols-1 md:grid-cols-2' : 
+            'grid-cols-1 md:grid-cols-3'
+          }`}>
             {centres.map((centre) => (
               <div key={centre.id} className="flex flex-col border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden bg-slate-50/50 dark:bg-slate-800/30">
                 <div 

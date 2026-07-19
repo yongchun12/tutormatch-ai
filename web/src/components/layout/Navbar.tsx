@@ -28,9 +28,6 @@ export async function Navbar() {
               AI Recommendations
             </Link>
           </nav>
-          <div className="ml-4 border-l border-slate-200 dark:border-slate-800 pl-4">
-            <GlobalLocationSelector />
-          </div>
         </div>
         
         <div className="flex items-center gap-4">

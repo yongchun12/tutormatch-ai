@@ -40,19 +40,19 @@ export default async function StudentLayout({
         </div>
         
         <nav className="flex-1 space-y-2">
-          <Link href="/dashboard/student" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
+          <Link href="/dashboard/student" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <Sparkles className="w-5 h-5" /> Recommendations
           </Link>
-          <Link href="/dashboard/student/saved" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
+          <Link href="/dashboard/student/saved" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <Heart className="w-5 h-5" /> Saved Centres
           </Link>
-          <Link href="/dashboard/student/enquiries" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
+          <Link href="/dashboard/student/enquiries" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <BookOpen className="w-5 h-5" /> My Enquiries
           </Link>
-          <Link href="/dashboard/student/reviews" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
+          <Link href="/dashboard/student/reviews" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <Star className="w-5 h-5" /> My Reviews
           </Link>
-          <Link href="/dashboard/student/profile" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
+          <Link href="/dashboard/student/profile" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <Settings className="w-5 h-5" /> Settings
           </Link>
         </nav>

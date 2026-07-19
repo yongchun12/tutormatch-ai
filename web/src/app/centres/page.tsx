@@ -13,6 +13,8 @@ import { User } from "@/models/User";
 import { Review } from "@/models/Review";
 import { aiService, CandidateCentre } from "@/services/aiService";
 
+import { scrapeLocation } from "@/services/scraperService";
+
 // Helper to assign a random gradient based on centre ID string length or char code
 const getGradient = (id: string) => {
   const gradients = [
@@ -25,9 +27,19 @@ const getGradient = (id: string) => {
   return gradients[index];
 };
 
-export default async function CentresDirectory() {
+export default async function CentresDirectory({ searchParams }: { searchParams: { address?: string; q?: string } }) {
   // Connect to DB first before any Mongoose operations
   await dbConnect();
+
+  // Auto-crawl if an address is provided in the search
+  if (searchParams?.address) {
+    try {
+      console.log(`Auto-crawling for location: ${searchParams.address}`);
+      await scrapeLocation(searchParams.address);
+    } catch (error) {
+      console.error("Auto-crawl failed:", error);
+    }
+  }
   
   const session = await getServerSession(authOptions);
   let studentProfile = null;

@@ -33,22 +33,22 @@ export default async function AdminLayout({
           <Link href="/dashboard/admin" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800 hover:text-white font-medium transition-colors">
             <Activity className="w-5 h-5 text-rose-400" /> Platform Overview
           </Link>
-          <Link href="/dashboard/admin/centres" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white font-medium transition-colors">
+          <Link href="/dashboard/admin/centres" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
             <Database className="w-5 h-5" /> Manage Centres
           </Link>
-          <Link href="/dashboard/admin/users" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white font-medium transition-colors">
+          <Link href="/dashboard/admin/users" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
             <Users className="w-5 h-5" /> User Accounts
           </Link>
-          <Link href="/dashboard/admin/ai" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white font-medium transition-colors">
+          <Link href="/dashboard/admin/ai" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
             <BrainCircuit className="w-5 h-5" /> AI Engine Status
           </Link>
-          <Link href="/dashboard/admin/scraper" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white font-medium transition-colors">
+          <Link href="/dashboard/admin/scraper" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
             <Globe className="w-5 h-5" /> Web Scraper Logs
           </Link>
-          <Link href="/dashboard/admin/reviews" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white font-medium transition-colors">
+          <Link href="/dashboard/admin/reviews" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
             <Star className="w-5 h-5" /> Moderation (Reviews)
           </Link>
-          <Link href="/dashboard/admin/enquiries" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white font-medium transition-colors">
+          <Link href="/dashboard/admin/enquiries" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
             <Activity className="w-5 h-5" /> Enquiries List
           </Link>
         </nav>

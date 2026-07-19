@@ -36,13 +36,26 @@ export default async function Home() {
             Discover top-rated tuition centres tailored to your learning style, location, and budget. Backed by intelligent sentiment analysis.
           </p>
 
-          <div className="max-w-2xl mx-auto w-full pt-4 space-y-6">
+          <div className="max-w-3xl mx-auto w-full pt-6 space-y-8">
             <HomeSearchClient />
+
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-4 animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-300">
+              <span className="text-sm font-medium text-slate-500 dark:text-slate-400 mr-2">Popular States:</span>
+              {["Selangor", "Kuala Lumpur", "Penang", "Johor"].map((state) => (
+                <Link 
+                  key={state}
+                  href={`/centres?address=${encodeURIComponent(state)}`}
+                  className="px-4 py-1.5 rounded-full text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all shadow-sm hover:shadow"
+                >
+                  {state}
+                </Link>
+              ))}
+            </div>
             
-            <div className="flex items-center justify-center gap-4 text-sm text-slate-500 dark:text-slate-400">
-              <div className="w-12 h-px bg-slate-200 dark:bg-slate-800" />
-              <span>OR</span>
-              <div className="w-12 h-px bg-slate-200 dark:bg-slate-800" />
+            <div className="flex items-center justify-center gap-4 text-sm text-slate-400 dark:text-slate-500 pt-2">
+              <div className="w-16 h-px bg-slate-200 dark:bg-slate-800" />
+              <span className="tracking-widest uppercase text-xs font-bold">OR</span>
+              <div className="w-16 h-px bg-slate-200 dark:bg-slate-800" />
             </div>
 
             <PreferencesCTAClient isLoggedIn={isLoggedIn} />

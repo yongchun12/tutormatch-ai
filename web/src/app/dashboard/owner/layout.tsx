@@ -39,19 +39,19 @@ export default async function OwnerLayout({
         </div>
         
         <nav className="flex-1 space-y-2">
-          <Link href="/dashboard/owner" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
+          <Link href="/dashboard/owner" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <Building2 className="w-5 h-5" /> My Centres
           </Link>
-          <Link href="/dashboard/owner/enquiries" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
+          <Link href="/dashboard/owner/enquiries" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <MessageSquare className="w-5 h-5" /> Enquiries
           </Link>
-          <Link href="/dashboard/owner/reviews" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
+          <Link href="/dashboard/owner/reviews" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <Star className="w-5 h-5" /> Reviews
           </Link>
-          <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
+          <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <Users className="w-5 h-5" /> Student Leads
           </Link>
-          <Link href="/dashboard/owner/profile" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
+          <Link href="/dashboard/owner/profile" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <Settings className="w-5 h-5" /> Settings
           </Link>
         </nav>
