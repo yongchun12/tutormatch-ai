@@ -41,16 +41,8 @@ export async function submitReviewAction(formData: FormData) {
         });
 
         // Update the averageRating and reviewCount of the TuitionCentre
-        const allReviews = await Review.find({ centreId: centreId }).lean();
-        const reviewCount = allReviews.length;
-        const averageRating = reviewCount > 0 
-            ? (allReviews.reduce((sum, r) => sum + r.rating, 0) / reviewCount).toFixed(1)
-            : 0;
-
-        await TuitionCentre.findByIdAndUpdate(centreId, {
-            reviewCount: reviewCount,
-            averageRating: parseFloat(averageRating as string)
-        });
+        const { recalculateCentreRating } = await import("@/lib/review-helpers");
+        await recalculateCentreRating(centreId);
 
         // Revalidate the page so the new review shows up instantly
         revalidatePath(`/centres/${centreId}`);

@@ -45,6 +45,9 @@ export default async function OwnerLayout({
           <Link href="/dashboard/owner/enquiries" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <MessageSquare className="w-5 h-5" /> Enquiries
           </Link>
+          <Link href="/dashboard/owner/reviews" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
+            <Star className="w-5 h-5" /> Reviews
+          </Link>
           <Link href="#" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <Users className="w-5 h-5" /> Student Leads
           </Link>

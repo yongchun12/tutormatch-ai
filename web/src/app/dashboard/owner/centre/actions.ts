@@ -28,16 +28,29 @@ export async function updateCentreAction(centreId: string, formData: FormData) {
     const state = formData.get("state") as string;
     const location = formData.get("location") as string;
     const subjectsStr = formData.get("subjects") as string;
+    const galleryUrlsStr = formData.get("galleryUrls") as string;
 
     const subjects = subjectsStr ? subjectsStr.split(",").map(s => s.trim()).filter(Boolean) : [];
+    
+    let galleryUrls: string[] = [];
+    try {
+      if (galleryUrlsStr) {
+        galleryUrls = JSON.parse(galleryUrlsStr);
+      }
+    } catch (e) {
+      console.error("Failed to parse galleryUrls", e);
+    }
 
     centre.name = name;
     centre.description = description;
     centre.contactNumber = contactNumber;
     centre.city = city;
     centre.state = state;
-    centre.location = location;
+    centre.address = location;
     centre.subjects = subjects;
+    if (galleryUrls.length > 0 || centre.galleryUrls) {
+      centre.galleryUrls = galleryUrls;
+    }
 
     await centre.save();
     

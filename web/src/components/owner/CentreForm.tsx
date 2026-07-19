@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Save, Loader2 } from "lucide-react";
 import { updateCentreAction } from "@/app/dashboard/owner/centre/actions";
+import FileUploader from "@/components/FileUploader";
 
 interface CentreFormProps {
   initialData: any;
@@ -16,6 +17,7 @@ export default function CentreForm({ initialData }: CentreFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
+  const [galleryUrls, setGalleryUrls] = useState<string[]>(initialData.galleryUrls || []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -114,6 +116,18 @@ export default function CentreForm({ initialData }: CentreFormProps) {
             placeholder="e.g. Mathematics, Science, English"
             className="dark:bg-slate-900"
           />
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Media Gallery</label>
+          <p className="text-xs text-slate-500 mb-2">Upload up to 10 photos of your centre to attract more students.</p>
+          <FileUploader 
+            value={galleryUrls} 
+            onChange={setGalleryUrls} 
+            maxFiles={10} 
+          />
+          {/* Hidden input to submit the array of URLs with formData */}
+          <input type="hidden" name="galleryUrls" value={JSON.stringify(galleryUrls)} />
         </div>
       </div>
 

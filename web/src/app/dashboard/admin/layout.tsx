@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { ShieldCheck, Activity, Database, Users, BrainCircuit, Globe } from "lucide-react";
+import { ShieldCheck, Activity, Database, Users, BrainCircuit, Globe, Star } from "lucide-react";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
 
 export default async function AdminLayout({
@@ -44,6 +44,9 @@ export default async function AdminLayout({
           </Link>
           <Link href="/dashboard/admin/scraper" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white font-medium transition-colors">
             <Globe className="w-5 h-5" /> Web Scraper Logs
+          </Link>
+          <Link href="/dashboard/admin/reviews" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white font-medium transition-colors">
+            <Star className="w-5 h-5" /> Moderation (Reviews)
           </Link>
           <Link href="/dashboard/admin/enquiries" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white font-medium transition-colors">
             <Activity className="w-5 h-5" /> Enquiries List

@@ -12,6 +12,7 @@ export interface ITuitionCentre extends Document {
   teachingMode: "online" | "physical" | "hybrid";
   status: "pending" | "approved" | "rejected";
   logoUrl?: string;
+  galleryUrls?: string[];
   contactNumber?: string;
   website?: string;
   email?: string;
@@ -42,6 +43,7 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
     teachingMode: { type: String, enum: ["online", "physical", "hybrid"], default: "physical" },
     status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
     logoUrl: { type: String },
+    galleryUrls: [{ type: String }],
     contactNumber: { type: String },
     website: { type: String },
     email: { type: String },

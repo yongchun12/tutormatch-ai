@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { MapPin, Star, Clock, CheckCircle2, TrendingUp, MessageSquare, ArrowLeft, Heart, ShieldCheck, ThumbsUp, ThumbsDown, Minus, Sparkles, BookOpen, Phone, Globe, Mail } from "lucide-react";
+import { MapPin, Star, Clock, CheckCircle2, TrendingUp, MessageSquare, ArrowLeft, Heart, ShieldCheck, ThumbsUp, ThumbsDown, Minus, Sparkles, BookOpen, Phone, Globe, Mail, Image as ImageIcon } from "lucide-react";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { Review } from "@/models/Review";
@@ -75,6 +75,7 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
         website: rawCentre.website,
         email: rawCentre.email,
         ownerId: rawCentre.ownerId,
+        galleryUrls: rawCentre.galleryUrls || [],
         isVerified: rawCentre.isVerified || false,
       };
       
@@ -206,6 +207,9 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
             <Tabs defaultValue="overview" className="w-full">
               <TabsList className="w-full bg-white dark:bg-slate-900 p-1 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 justify-start overflow-x-auto">
                 <TabsTrigger value="overview" className="rounded-xl px-6 data-[state=active]:bg-indigo-50 dark:data-[state=active]:bg-indigo-900/50 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400">Overview</TabsTrigger>
+                {centre.galleryUrls.length > 0 && (
+                  <TabsTrigger value="gallery" className="rounded-xl px-6 data-[state=active]:bg-indigo-50 dark:data-[state=active]:bg-indigo-900/50 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400">Gallery</TabsTrigger>
+                )}
                 <TabsTrigger value="subjects" className="rounded-xl px-6 data-[state=active]:bg-indigo-50 dark:data-[state=active]:bg-indigo-900/50 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400">Subjects & Pricing</TabsTrigger>
                 <TabsTrigger value="reviews" className="rounded-xl px-6 data-[state=active]:bg-indigo-50 dark:data-[state=active]:bg-indigo-900/50 data-[state=active]:text-indigo-600 dark:data-[state=active]:text-indigo-400">Reviews & AI Analysis</TabsTrigger>
               </TabsList>
@@ -242,6 +246,35 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                   </CardContent>
                 </Card>
               </TabsContent>
+
+              {/* GALLERY TAB */}
+              {centre.galleryUrls.length > 0 && (
+                <TabsContent value="gallery" className="mt-6 space-y-6">
+                  <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="font-heading text-2xl flex items-center gap-2">
+                        <ImageIcon className="w-5 h-5 text-indigo-500" /> Photo Gallery
+                      </CardTitle>
+                      <CardDescription>Take a look inside the centre</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {centre.galleryUrls.map((url: string, idx: number) => (
+                          <div key={idx} className="relative aspect-video sm:aspect-square md:aspect-video rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img 
+                              src={url} 
+                              alt={`Gallery photo ${idx + 1}`} 
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                            />
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              )}
 
               {/* REVIEWS & AI ANALYSIS TAB */}
               <TabsContent value="reviews" className="mt-6 space-y-6">
