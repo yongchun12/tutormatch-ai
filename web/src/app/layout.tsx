@@ -3,6 +3,7 @@ import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { SessionProviderWrapper } from "@/components/providers/SessionProviderWrapper";
+import { StudentAdvisorChat } from "@/components/chat/StudentAdvisorChat";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -33,6 +34,7 @@ export default function RootLayout({
         <SessionProviderWrapper>
           <Navbar />
           <main className="flex-1 flex flex-col">{children}</main>
+          <StudentAdvisorChat />
         </SessionProviderWrapper>
       </body>
     </html>

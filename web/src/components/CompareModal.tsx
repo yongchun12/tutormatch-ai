@@ -15,8 +15,8 @@ interface CompareModalProps {
 export default function CompareModal({ isOpen, setIsOpen, centres }: CompareModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogContent className={`max-h-[90vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 transition-all ${
-        centres.length === 1 ? 'max-w-md' : centres.length === 2 ? 'max-w-3xl' : 'max-w-5xl'
+      <DialogContent className={`w-[95vw] max-h-[90vh] overflow-y-auto rounded-3xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 transition-all ${
+        centres.length === 1 ? 'sm:max-w-md' : centres.length === 2 ? 'sm:max-w-4xl' : 'sm:max-w-6xl'
       }`}>
         <DialogHeader className="mb-4">
           <DialogTitle className="font-heading text-2xl text-slate-900 dark:text-white">
