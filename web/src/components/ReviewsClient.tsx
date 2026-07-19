@@ -22,6 +22,7 @@ interface ReviewsClientProps {
 export default function ReviewsClient({ reviewsList, totalRatings }: ReviewsClientProps) {
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("newest");
+  const [searchQuery, setSearchQuery] = useState("");
 
   if (reviewsList.length === 0) {
     return (
@@ -37,10 +38,18 @@ export default function ReviewsClient({ reviewsList, totalRatings }: ReviewsClie
     );
   }
 
-  // Filter
+  // Search
   let filtered = reviewsList;
+  if (searchQuery.trim() !== "") {
+    const q = searchQuery.toLowerCase();
+    filtered = filtered.filter(r => 
+      r.text?.toLowerCase().includes(q) || r.name?.toLowerCase().includes(q)
+    );
+  }
+
+  // Filter
   if (filter !== "all") {
-    filtered = reviewsList.filter(r => r.score === filter);
+    filtered = filtered.filter(r => r.score === filter);
   }
 
   // Sort
@@ -49,8 +58,7 @@ export default function ReviewsClient({ reviewsList, totalRatings }: ReviewsClie
   } else if (sort === "lowest") {
     filtered = [...filtered].sort((a, b) => a.rating - b.rating);
   } else {
-    // Newest is default (or as passed from DB/Google)
-    // Assuming original order is newest
+    // Newest is default
   }
 
   return (
@@ -59,11 +67,18 @@ export default function ReviewsClient({ reviewsList, totalRatings }: ReviewsClie
         <div>
           <h3 className="font-heading font-bold text-xl dark:text-white">Student Experiences</h3>
           <p className="text-sm text-slate-500 mt-1">
-            Showing {filtered.length} written reviews out of {totalRatings} total ratings (Google API limit).
+            Showing {reviewsList.length} written reviews out of {totalRatings} total ratings (Google Maps API limit).
           </p>
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <input 
+            type="text"
+            placeholder="Search reviews..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full sm:w-[200px] h-9 text-xs px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
           <Select value={filter} onValueChange={(val) => val && setFilter(val)}>
             <SelectTrigger className="w-[130px] h-9 text-xs rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-indigo-500">
               <SelectValue placeholder="Filter by" />

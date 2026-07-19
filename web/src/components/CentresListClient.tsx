@@ -38,6 +38,7 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
   
   // Filtering & Sorting State
   const [searchQuery, setSearchQuery] = useState("");
+  const [locationQuery, setLocationQuery] = useState("");
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [selectedMode, setSelectedMode] = useState<string>("All");
   const [maxFee, setMaxFee] = useState<number>(300);
@@ -134,25 +135,31 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
     const hasCoords = searchParams.has("lat") && searchParams.has("lng");
     const addrText = !hasCoords ? searchParams.get("address") : null;
     
-    if (searchQuery.trim() || addrText) {
-      const q = searchQuery.toLowerCase();
-      const addrQ = addrText?.toLowerCase() || "";
-      const searchTerms = [q, addrQ].filter(Boolean);
-      
-      if (searchTerms.length > 0) {
-        result = result.filter(c => {
-          return searchTerms.some(rawTerm => {
-            // Split by comma to handle "Penang, Malaysia" -> "Penang"
-            const term = rawTerm.split(',')[0].trim();
-            const termAlias = term.replace('penang', 'pinang');
-            
-            return c.name?.toLowerCase().includes(term) || 
-                   c.subjects?.some((s: string) => s.toLowerCase().includes(term)) ||
-                   c.location?.toLowerCase().includes(termAlias) ||
-                   c.description?.toLowerCase().includes(termAlias);
-          });
-        });
-      }
+    const q = searchQuery.toLowerCase().trim();
+    const lq = locationQuery.toLowerCase().trim();
+    const addrQ = addrText?.toLowerCase().trim() || "";
+    
+    if (q || lq || addrQ) {
+      result = result.filter(c => {
+        let passesGeneral = true;
+        if (q) {
+          passesGeneral = 
+            c.name?.toLowerCase().includes(q) || 
+            c.subjects?.some((s: string) => s.toLowerCase().includes(q));
+        }
+        
+        let passesLoc = true;
+        if (lq || addrQ) {
+          const locSearchTerm = lq || addrQ;
+          const termAlias = locSearchTerm.replace('penang', 'pinang');
+          passesLoc = 
+            c.location?.toLowerCase().includes(termAlias) ||
+            c.description?.toLowerCase().includes(termAlias) ||
+            c.name?.toLowerCase().includes(termAlias);
+        }
+        
+        return passesGeneral && passesLoc;
+      });
     }
 
     // 2. Subjects Filter
@@ -228,42 +235,44 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
   // Trigger auto-crawl if 0 results
   useEffect(() => {
     async function triggerCrawl() {
-      if (userLocation && locationName && processedCentres.length === 0 && !isCrawling && !hasCrawled) {
+      const targetAddress = locationQuery.trim() || locationName;
+      if (targetAddress && processedCentres.length === 0 && !isCrawling && !hasCrawled) {
         setIsCrawling(true);
         setHasCrawled(true); // Prevent multiple triggers for the same search
         setCrawlMessage("Searching Google Maps for tuition centres...");
         
         try {
-          const res = await fetch(`/api/crawl/ondemand?address=${encodeURIComponent(locationName)}`);
+          const res = await fetch(`/api/crawl/ondemand?address=${encodeURIComponent(targetAddress)}`);
           const data = await res.json();
           
           if (data.newCentres && data.newCentres.length > 0) {
             setAllCentres(prev => [...prev, ...data.newCentres]);
             
-            // Check if active filters will hide the new centres
-            // By doing a quick mock check against the first new centre
             const q = searchQuery.toLowerCase();
-            const hasCoords = searchParams.has("lat") && searchParams.has("lng");
-            const addrText = !hasCoords ? searchParams.get("address") : null;
-            const addrQ = addrText?.toLowerCase() || "";
-            const searchTerms = [q, addrQ].filter(Boolean);
+            const lq = locationQuery.toLowerCase();
             
             let someVisible = false;
             for (const c of data.newCentres) {
-               // roughly check if it passes text + subject filters
-               const passesText = searchTerms.length === 0 || searchTerms.some(term => 
-                 c.name?.toLowerCase().includes(term) || c.subjects?.some((s: string) => s.toLowerCase().includes(term)) || c.location?.toLowerCase().includes(term)
-               );
+               let passesGeneral = true;
+               if (q) {
+                 passesGeneral = c.name?.toLowerCase().includes(q) || c.subjects?.some((s: string) => s.toLowerCase().includes(q));
+               }
+               
+               let passesLoc = true;
+               if (lq) {
+                 passesLoc = c.location?.toLowerCase().includes(lq) || c.description?.toLowerCase().includes(lq) || c.name?.toLowerCase().includes(lq);
+               }
+               
                const passesSubject = selectedSubjects.length === 0 || selectedSubjects.some(sub => c.subjects?.includes(sub));
                
-               if (passesText && passesSubject) {
+               if (passesGeneral && passesLoc && passesSubject) {
                  someVisible = true;
                  break;
                }
             }
             
-            if (!someVisible && (searchQuery.trim() || selectedSubjects.length > 0)) {
-               setCrawlMessage(`Found ${data.newCentres.length} centres, but they were hidden by your filters (e.g. they don't teach ${searchQuery || selectedSubjects.join(", ")}). Remove filters to see them!`);
+            if (!someVisible && (searchQuery.trim() || locationQuery.trim() || selectedSubjects.length > 0)) {
+               setCrawlMessage(`Found ${data.newCentres.length} centres, but they were hidden by your filters. Remove filters to see them!`);
             } else {
                setCrawlMessage(`Found ${data.newCentres.length} new centres! Updating...`);
             }
@@ -306,24 +315,34 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
               <h1 className="text-3xl font-heading font-bold text-slate-900 dark:text-white mb-2">Explore Tuition Centres</h1>
               <p className="text-slate-500 dark:text-slate-400">Discover and compare the best tuition centres tailored to your needs.</p>
             </div>
-            <div className="w-full md:w-[500px] flex gap-2">
+            <div className="w-full md:w-[700px] flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input 
                   type="text" 
-                  placeholder="Search by name or subject..." 
+                  placeholder="Search name or subject..." 
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white shadow-sm"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
+              <div className="relative flex-1">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <input 
+                  type="text" 
+                  placeholder="Location (e.g. Subang)..." 
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white shadow-sm"
+                  value={locationQuery}
+                  onChange={(e) => setLocationQuery(e.target.value)}
+                />
+              </div>
               <Button 
                 onClick={handleGetLocation}
                 disabled={isLocating}
-                className="h-auto py-3 px-4 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 border border-indigo-100 dark:border-indigo-800"
+                className="h-auto py-3 px-4 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 border border-indigo-100 dark:border-indigo-800 shrink-0"
               >
                 {isLocating ? <Navigation className="w-5 h-5 animate-pulse" /> : <MapPin className="w-5 h-5" />}
-                <span className="ml-2 hidden sm:inline">{isLocating ? "Locating..." : "Find Nearby"}</span>
+                <span className="ml-2 hidden sm:inline">{isLocating ? "Locating..." : "GPS"}</span>
               </Button>
             </div>
           </div>

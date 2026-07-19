@@ -181,7 +181,7 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                   <Separator orientation="vertical" className="h-4 mx-3 bg-slate-500" />
                   <Star className="w-4 h-4 text-yellow-400 fill-yellow-400 mr-1" />
                   <span className="font-medium text-white">{centre.rating}</span>
-                  <span className="ml-1 text-slate-300">({aiSummary.total} reviews)</span>
+                  <span className="ml-1 text-slate-300">({centre.reviews} reviews)</span>
                 </div>
               </div>
 
