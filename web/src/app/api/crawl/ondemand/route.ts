@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { SystemLog } from "@/models/SystemLog";
+import { getSessionUser } from "@/lib/authz";
 
 // Subject keywords mapping for smart extraction
 const SUBJECT_KEYWORDS: Record<string, string[]> = {
@@ -54,6 +55,12 @@ function mapPriceLevel(level: number | undefined): string {
 
 export async function GET(req: NextRequest) {
   try {
+    // Billable Google Places calls + DB writes — admins only.
+    const user = await getSessionUser();
+    if (!user || user.role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const address = searchParams.get("address");
 

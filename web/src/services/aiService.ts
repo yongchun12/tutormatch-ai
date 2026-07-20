@@ -67,7 +67,7 @@ function toStudentInput(profile: StudentProfile): StudentInput {
     subjectsNeeded: profile.subjects_needed ?? [],
     userLat: profile.user_lat ?? null,
     userLng: profile.user_lng ?? null,
-    maxDistanceKm: profile.max_distance_km ?? 20,
+    maxDistanceKm: profile.max_distance_km ?? 25,
   };
 }
 

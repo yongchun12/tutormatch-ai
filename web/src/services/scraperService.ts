@@ -212,25 +212,17 @@ export async function scrapeLocation(locationQuery: string) {
                 continue;
             }
 
-            const rating = place.rating || 4.0;
+            // Use the real Google rating; do NOT fabricate one (0 = "no rating yet").
+            const rating = place.rating || 0;
             const reviewCount = place.user_ratings_total || 0;
-            
-            // Parse State from Address
-            const malaysianStates = ["Johor", "Kedah", "Kelantan", "Melaka", "Negeri Sembilan", "Pahang", "Perak", "Perlis", "Penang", "Pulau Pinang", "Sabah", "Sarawak", "Selangor", "Terengganu", "Kuala Lumpur", "Putrajaya", "Labuan"];
-            
-            let state = "Kuala Lumpur"; // Default fallback
-            for (const s of malaysianStates) {
-                if (address.toLowerCase().includes(s.toLowerCase())) {
-                    state = s === "Pulau Pinang" ? "Penang" : s;
-                    break;
-                }
-            }
-            
-            if (locationQuery !== "Malaysia" && state === "Kuala Lumpur" && !address.toLowerCase().includes("kuala lumpur")) {
-                state = locationQuery;
-            }
 
-            const city = state; 
+            // Parse the state from the address, defaulting to the searched location
+            // (not a hard-coded "Kuala Lumpur").
+            const state = parseState(address, locationQuery !== "Malaysia" ? locationQuery : "Kuala Lumpur");
+            const city = state;
+
+            // Deduce subjects from the place name instead of assuming a fixed set.
+            const deducedSubjects = extractSubjectsFromText(name);
 
             let logoUrl = "";
             if (place.photos && place.photos.length > 0) {
@@ -264,8 +256,8 @@ export async function scrapeLocation(locationQuery: string) {
                     address: address,
                     city: city,
                     state: state,
-                    subjects: ["Mathematics", "English", "Science"],
-                    priceRange: "RM 150 - RM 300/mo",
+                    subjects: deducedSubjects,
+                    priceRange: mapPriceLevel(place.price_level),
                     teachingMode: "physical",
                     status: "approved", 
                     averageRating: rating,

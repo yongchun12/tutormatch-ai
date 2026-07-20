@@ -17,7 +17,7 @@ export async function getPublicRecommendationsAction(subjects: string[]) {
             city: c.city,
             state: c.state,
             subjects: c.subjects,
-            average_rating: c.averageRating || 4.5,
+            average_rating: c.averageRating || 0,
         }));
 
         const studentProfile = {

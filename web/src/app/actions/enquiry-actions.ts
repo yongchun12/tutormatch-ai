@@ -14,15 +14,33 @@ export async function updateEnquiryStatusAction(enquiryId: string, status: strin
         }
 
         await dbConnect();
-        
-        // We only check if the user is logged in, but we probably should verify ownership 
-        // if this was a production app. For now we just update it.
-        await Enquiry.findByIdAndUpdate(enquiryId, { status, updatedAt: new Date() });
+
+        // Authorize: admins may update any enquiry; owners only enquiries for a
+        // centre they own. Students cannot change enquiry status.
+        const role = (session.user as any).role;
+        const userId = (session.user as any).id;
+
+        const enquiry = await Enquiry.findById(enquiryId).populate("centreId");
+        if (!enquiry) {
+            throw new Error("Enquiry not found");
+        }
+
+        const isAdmin = role === "admin";
+        const isOwnerOfCentre =
+            role === "owner" &&
+            (enquiry.centreId as any)?.ownerId?.toString() === userId;
+
+        if (!isAdmin && !isOwnerOfCentre) {
+            throw new Error("Unauthorized: you cannot update this enquiry.");
+        }
+
+        enquiry.status = status as any;
+        await enquiry.save();
 
         revalidatePath("/dashboard/owner/enquiries");
         revalidatePath("/dashboard/student/enquiries");
         revalidatePath("/dashboard/admin");
-        
+
         return { success: true };
     } catch (error: any) {
         console.error("Failed to update enquiry:", error);

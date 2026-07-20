@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
 import { scrapeLocation } from "@/services/scraperService";
+import { getSessionUser } from "@/lib/authz";
 
 export async function GET(req: Request) {
   try {
+    // This triggers billable Google Places calls and writes to the DB — admins only.
+    const user = await getSessionUser();
+    if (!user || user.role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const locationQuery = searchParams.get("location") || "Malaysia";
     

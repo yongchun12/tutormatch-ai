@@ -11,6 +11,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
+    // Only self-service roles may be chosen at registration. "admin" can never
+    // be granted here — otherwise anyone could POST role:"admin" and self-elevate.
+    const allowedRoles = ["student", "owner"];
+    const safeRole = allowedRoles.includes(role) ? role : "student";
+
     await dbConnect();
 
     // Check if user exists
@@ -28,7 +33,7 @@ export async function POST(req: Request) {
       name,
       email,
       passwordHash,
-      role: role || "student",
+      role: safeRole,
       subjectsNeeded: subjectsNeeded || [],
       preferredLocation: preferredLocation || "",
       maxPrice: maxPrice || 0

@@ -6,7 +6,12 @@ import { revalidatePath } from "next/cache";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 
-export async function generateMockCentreAction() {
+/**
+ * Creates a blank starter centre for the signed-in owner so they can then fill
+ * in the real details from the owner dashboard. Uses neutral placeholder values
+ * (no fabricated ratings/coordinates) that the owner is expected to edit.
+ */
+export async function createStarterCentreAction() {
     try {
         const session = await getServerSession(authOptions);
         if (!session || !session.user || (session.user as any).role !== "owner") {
@@ -14,28 +19,27 @@ export async function generateMockCentreAction() {
         }
 
         await dbConnect();
-        
-        // Generate a mock centre
-        const mockCentre = new TuitionCentre({
-            name: "Future Stars Academy (Mock)",
-            description: "A premier tuition centre dedicated to helping students achieve their academic goals. This is a mock centre generated for testing purposes.",
+
+        const ownerName = (session.user as any).name || "My";
+
+        const centre = new TuitionCentre({
+            name: `${ownerName}'s Tuition Centre`,
+            description: "Add a description of your tuition centre here.",
             ownerId: (session.user as any).id,
             city: "Kuala Lumpur",
-            state: "Selangor",
-            subjects: ["Mathematics", "Science", "English"],
-            priceRange: "RM150 - RM300/month",
-            teachingMode: "hybrid",
-            status: "approved", // instantly approved so it shows up
+            state: "Kuala Lumpur",
+            subjects: [],
+            priceRange: "Contact for pricing",
+            teachingMode: "physical",
+            status: "approved",
             averageRating: 0,
             reviewCount: 0,
-            latitude: 3.140853,
-            longitude: 101.693207
         });
 
-        await mockCentre.save();
+        await centre.save();
 
         revalidatePath("/dashboard/owner");
     } catch (error: any) {
-        console.error("Failed to generate mock centre:", error);
+        console.error("Failed to create starter centre:", error);
     }
 }

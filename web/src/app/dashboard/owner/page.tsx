@@ -13,7 +13,7 @@ import { Review } from "@/models/Review";
 import { StudentLead } from "@/models/StudentLead";
 import { User } from "@/models/User";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
-import { generateMockCentreAction } from "./actions";
+import { createStarterCentreAction } from "./actions";
 
 export default async function OwnerDashboard() {
   const session = await getServerSession(authOptions);
@@ -94,9 +94,9 @@ export default async function OwnerDashboard() {
                     </p>
                   </div>
                 </div>
-                <form action={generateMockCentreAction}>
+                <form action={createStarterCentreAction}>
                   <Button type="submit" className="rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold px-6 py-6 shadow-lg shadow-amber-500/20 whitespace-nowrap transition-transform hover:scale-105">
-                    Generate Mock Centre (Testing)
+                    Create My Centre
                   </Button>
                 </form>
               </CardContent>

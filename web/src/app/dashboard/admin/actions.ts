@@ -1,12 +1,15 @@
 "use server";
 
+import bcrypt from "bcryptjs";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { User } from "@/models/User";
 import { ClaimRequest } from "@/models/ClaimRequest";
+import { requireAdmin, requireUser } from "@/lib/authz";
 import { revalidatePath } from "next/cache";
 
 export async function approveCentreAction(centreId: string) {
+    await requireAdmin();
     if (!centreId) {
         throw new Error("Missing centreId");
     }
@@ -28,6 +31,7 @@ export async function approveCentreAction(centreId: string) {
 }
 
 export async function verifyCentreAction(centreId: string) {
+    await requireAdmin();
     if (!centreId) {
         throw new Error("Missing centreId");
     }
@@ -49,22 +53,31 @@ export async function verifyCentreAction(centreId: string) {
 }
 
 export async function rejectCentreAction(centreId: string) {
+    await requireAdmin();
     if (!centreId) {
         throw new Error("Missing centreId");
     }
 
     await dbConnect();
 
-    const deleted = await TuitionCentre.findByIdAndDelete(centreId);
+    // Reject = mark as rejected (kept for the audit trail, hidden from the
+    // public directory), NOT deleted. Use deleteCentreAction to remove entirely.
+    const updated = await TuitionCentre.findByIdAndUpdate(
+        centreId,
+        { status: "rejected" },
+        { new: true }
+    );
 
-    if (!deleted) {
+    if (!updated) {
         throw new Error("Centre not found");
     }
 
     revalidatePath("/dashboard/admin");
+    revalidatePath("/centres");
 }
 
 export async function deleteCentreAction(centreId: string) {
+    await requireAdmin();
     if (!centreId) {
         throw new Error("Missing centreId");
     }
@@ -82,6 +95,7 @@ export async function deleteCentreAction(centreId: string) {
 }
 
 export async function deleteUserAction(userId: string) {
+    await requireAdmin();
     if (!userId) {
         throw new Error("Missing userId");
     }
@@ -97,30 +111,46 @@ export async function deleteUserAction(userId: string) {
 }
 
 export async function adminCreateUserAction(formData: FormData) {
+    await requireAdmin();
     await dbConnect();
-    
+
     const name = formData.get("name") as string;
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
-    const role = formData.get("role") as string;
+    const roleInput = formData.get("role") as string;
 
-    const bcrypt = require("bcryptjs");
-    const hashedPassword = await bcrypt.hash(password, 10);
+    if (!name || !email || !password) {
+        throw new Error("Name, email and password are required.");
+    }
 
-    const newUser = new User({
+    const allowedRoles = ["student", "owner", "admin"] as const;
+    const role = (allowedRoles as readonly string[]).includes(roleInput)
+        ? (roleInput as (typeof allowedRoles)[number])
+        : "student";
+
+    const existing = await User.findOne({ email });
+    if (existing) {
+        throw new Error("Email already in use.");
+    }
+
+    // FIX: the schema field is `passwordHash` (login reads it); the old code set
+    // `password`, which failed schema validation and left accounts unusable.
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await User.create({
         name,
         email,
-        password: hashedPassword,
-        role
+        passwordHash,
+        role,
     });
 
-    await newUser.save();
     revalidatePath("/dashboard/admin/users");
 }
 
 export async function adminUpdateUserAction(formData: FormData) {
+    await requireAdmin();
     await dbConnect();
-    
+
     const id = formData.get("id") as string;
     const name = formData.get("name") as string;
     const email = formData.get("email") as string;
@@ -131,8 +161,9 @@ export async function adminUpdateUserAction(formData: FormData) {
 }
 
 export async function createCentreAction(formData: FormData) {
+    await requireAdmin();
     await dbConnect();
-    
+
     const name = formData.get("name") as string;
     const ownerId = formData.get("ownerId") as string;
     const city = formData.get("city") as string;
@@ -159,8 +190,9 @@ export async function createCentreAction(formData: FormData) {
 }
 
 export async function updateCentreAction(formData: FormData) {
+    await requireAdmin();
     await dbConnect();
-    
+
     const id = formData.get("id") as string;
     const name = formData.get("name") as string;
     const ownerId = formData.get("ownerId") as string;
@@ -188,20 +220,25 @@ export async function updateCentreAction(formData: FormData) {
 }
 
 export async function submitClaimRequestAction(userId: string, centreId: string, proofMessage: string) {
-    if (!userId || !centreId || !proofMessage) {
+    // A claim is submitted by the claimant themselves — require a signed-in user
+    // and always attribute the claim to that session, never a caller-supplied id.
+    const user = await requireUser();
+    const claimantId = user.id;
+
+    if (!centreId || !proofMessage) {
         throw new Error("Missing required fields for claim request");
     }
 
     await dbConnect();
-    
+
     // Check if a pending claim already exists
-    const existing = await ClaimRequest.findOne({ userId, centreId, status: "pending" });
+    const existing = await ClaimRequest.findOne({ userId: claimantId, centreId, status: "pending" });
     if (existing) {
         throw new Error("You already have a pending claim for this centre.");
     }
 
     await ClaimRequest.create({
-        userId,
+        userId: claimantId,
         centreId,
         proofMessage,
         status: "pending"
@@ -211,8 +248,9 @@ export async function submitClaimRequestAction(userId: string, centreId: string,
 }
 
 export async function approveClaimRequestAction(claimId: string) {
+    await requireAdmin();
     await dbConnect();
-    
+
     const claim = await ClaimRequest.findById(claimId);
     if (!claim) throw new Error("Claim not found");
 
@@ -234,8 +272,9 @@ export async function approveClaimRequestAction(claimId: string) {
 }
 
 export async function rejectClaimRequestAction(claimId: string) {
+    await requireAdmin();
     await dbConnect();
-    
+
     const claim = await ClaimRequest.findById(claimId);
     if (!claim) throw new Error("Claim not found");
 
