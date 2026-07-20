@@ -10,6 +10,7 @@ import { Users as UsersIcon, Plus, Edit } from "lucide-react";
 import Link from "next/link";
 import { deleteUserAction } from "../actions";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { ActionModal } from "@/components/ui/action-modal";
 
 export default async function ManageUsers(props: {
     searchParams: Promise<{ page?: string }>
@@ -93,11 +94,18 @@ export default async function ManageUsers(props: {
                                                 </Button>
                                             </Link>
                                             {user.role !== "admin" && (
-                                                <form action={deleteUserAction.bind(null, user._id.toString())}>
-                                                    <Button type="submit" size="sm" variant="outline" className="h-8 px-2 text-rose-500 border-rose-200 hover:bg-rose-50 dark:border-rose-900/50 dark:hover:bg-rose-950/30">
-                                                        Delete
-                                                    </Button>
-                                                </form>
+                                                <ActionModal 
+                                                    triggerBtn={
+                                                        <Button size="sm" variant="outline" className="h-8 px-2 text-rose-500 border-rose-200 hover:bg-rose-50 dark:border-rose-900/50 dark:hover:bg-rose-950/30">
+                                                            Delete
+                                                        </Button>
+                                                    }
+                                                    title="Delete User Account"
+                                                    description={`Are you sure you want to permanently delete ${user.name}'s account? They will lose all access.`}
+                                                    confirmBtnText="Yes, Delete User"
+                                                    confirmBtnVariant="destructive"
+                                                    action={deleteUserAction.bind(null, user._id.toString())}
+                                                />
                                             )}
                                         </td>
                                     </tr>

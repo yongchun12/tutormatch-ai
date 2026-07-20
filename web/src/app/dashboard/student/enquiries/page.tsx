@@ -10,6 +10,7 @@ import dbConnect from "@/lib/db";
 import { Enquiry } from "@/models/Enquiry";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { deleteEnquiryAction, updateEnquiryMessageAction } from "./actions";
+import { ActionModal } from "@/components/ui/action-modal";
 
 export default async function StudentEnquiriesPage() {
   const session = await getServerSession(authOptions);
@@ -80,11 +81,18 @@ export default async function StudentEnquiriesPage() {
                           }`}>
                             {enq.status}
                           </Badge>
-                          <form action={deleteEnquiryAction.bind(null, enq._id.toString())}>
-                             <Button type="submit" variant="ghost" size="icon" className="text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30 rounded-xl">
-                               <Trash2 className="w-4 h-4" />
-                             </Button>
-                          </form>
+                          <ActionModal 
+                             triggerBtn={
+                               <Button variant="ghost" size="icon" className="text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30 rounded-xl" title="Delete Enquiry">
+                                 <Trash2 className="w-4 h-4" />
+                               </Button>
+                             }
+                             title="Delete Enquiry"
+                             description="Are you sure you want to delete this enquiry? This action cannot be undone."
+                             confirmBtnText="Yes, Delete"
+                             confirmBtnVariant="destructive"
+                             action={deleteEnquiryAction.bind(null, enq._id.toString())}
+                          />
                       </div>
                     </div>
                   </CardHeader>

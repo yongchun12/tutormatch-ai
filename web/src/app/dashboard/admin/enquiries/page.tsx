@@ -12,6 +12,7 @@ import { TuitionCentre } from "@/models/TuitionCentre";
 import { User } from "@/models/User";
 import { adminDeleteEnquiryAction } from "./actions";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { ActionModal } from "@/components/ui/action-modal";
 
 export default async function AdminEnquiriesPage(props: {
   searchParams: Promise<{ page?: string }>;
@@ -96,11 +97,18 @@ export default async function AdminEnquiriesPage(props: {
                                <MessageSquare className="w-4 h-4" />
                              </Button>
                           </Link>
-                          <form action={adminDeleteEnquiryAction.bind(null, enq._id.toString())}>
-                             <Button type="submit" variant="ghost" size="icon" className="text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30 rounded-xl" title="Delete Enquiry">
-                               <Trash2 className="w-4 h-4" />
-                             </Button>
-                          </form>
+                          <ActionModal 
+                             triggerBtn={
+                               <Button variant="ghost" size="icon" className="text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30 rounded-xl" title="Delete Enquiry">
+                                 <Trash2 className="w-4 h-4" />
+                               </Button>
+                             }
+                             title="Delete Enquiry"
+                             description="Are you sure you want to delete this enquiry? This action cannot be undone."
+                             confirmBtnText="Yes, Delete"
+                             confirmBtnVariant="destructive"
+                             action={adminDeleteEnquiryAction.bind(null, enq._id.toString())}
+                          />
                       </div>
                     </div>
                   </CardHeader>

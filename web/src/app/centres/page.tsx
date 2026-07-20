@@ -27,7 +27,9 @@ const getGradient = (id: string) => {
   return gradients[index];
 };
 
-export default async function CentresDirectory({ searchParams }: { searchParams: { address?: string; q?: string } }) {
+export default async function CentresDirectory(props: { searchParams: Promise<{ address?: string; q?: string }> }) {
+  const searchParams = await props.searchParams;
+  
   // Connect to DB first before any Mongoose operations
   await dbConnect();
 

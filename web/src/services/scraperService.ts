@@ -1,6 +1,171 @@
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 
+// ---------------------------------------------------------------------------
+// Lightweight, chat-facing live discovery.
+// Reuses the Google Places crawl pattern but skips the slow per-place "details"
+// calls so it can run inline while a user is chatting. Every time a location is
+// searched in the AI advisor, we refresh the database from Google Maps first,
+// so results always reflect what's currently out there.
+// ---------------------------------------------------------------------------
+
+const SUBJECT_KEYWORDS: Record<string, string[]> = {
+  Mathematics: ["math", "mathematics", "calculus", "algebra", "add math"],
+  Science: ["science", "sains"],
+  Physics: ["physics", "fizik"],
+  Chemistry: ["chemistry", "kimia"],
+  Biology: ["biology", "biologi"],
+  English: ["english", "inggeris", "muet", "ielts"],
+  "Bahasa Melayu": ["malay", "melayu", "bm"],
+  Sejarah: ["sejarah", "history"],
+  Accounting: ["account", "akaun", "accounting"],
+};
+
+function extractSubjectsFromText(text: string): string[] {
+  const found = new Set<string>();
+  const lower = text.toLowerCase();
+  for (const [subject, keywords] of Object.entries(SUBJECT_KEYWORDS)) {
+    if (keywords.some((k) => lower.includes(k))) found.add(subject);
+  }
+  return Array.from(found);
+}
+
+function mapPriceLevel(level: number | undefined): string {
+  if (level === 1) return "Inexpensive ($)";
+  if (level === 2) return "Moderate ($$)";
+  if (level === 3) return "Expensive ($$$)";
+  if (level === 4) return "Premium ($$$$)";
+  return "Contact for pricing";
+}
+
+const MALAYSIAN_STATES = [
+  "Johor", "Kedah", "Kelantan", "Melaka", "Negeri Sembilan", "Pahang",
+  "Perak", "Perlis", "Penang", "Pulau Pinang", "Sabah", "Sarawak",
+  "Selangor", "Terengganu", "Kuala Lumpur", "Putrajaya", "Labuan",
+];
+
+function parseState(address: string, fallback: string): string {
+  const lower = address.toLowerCase();
+  for (const s of MALAYSIAN_STATES) {
+    if (lower.includes(s.toLowerCase())) return s === "Pulau Pinang" ? "Penang" : s;
+  }
+  return fallback;
+}
+
+// Avoid re-crawling the same location repeatedly within a short window (keeps
+// the chat snappy and Places API usage in check). Resets per server instance.
+const recentCrawls = new Map<string, number>();
+const CRAWL_TTL_MS = 3 * 60 * 1000; // 3 minutes
+
+/**
+ * Live-refresh the database with tuition centres around `location` from Google
+ * Maps. Safe to call inline from the chat tool: it fails soft (returns 0) if the
+ * API key is missing or Google returns nothing, so the caller can always fall
+ * back to whatever is already in the database.
+ */
+export async function discoverAndSyncCentres(
+  location: string
+): Promise<{ discovered: number; refreshed: boolean }> {
+  const key = location.trim().toLowerCase();
+  if (!key) return { discovered: 0, refreshed: false };
+
+  const last = recentCrawls.get(key);
+  if (last && Date.now() - last < CRAWL_TTL_MS) {
+    return { discovered: 0, refreshed: true }; // recently refreshed
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) return { discovered: 0, refreshed: false };
+
+  await dbConnect();
+
+  const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
+    `tuition centre in ${location}`
+  )}&key=${apiKey}`;
+
+  const res = await fetch(url);
+  const data = await res.json();
+
+  // Mark as attempted regardless, so a ZERO_RESULTS location isn't hammered.
+  recentCrawls.set(key, Date.now());
+
+  if (data.status !== "OK" || !Array.isArray(data.results)) {
+    return { discovered: 0, refreshed: true };
+  }
+
+  let discovered = 0;
+
+  for (const place of data.results.slice(0, 12)) {
+    const name: string | undefined = place.name;
+    if (!name) continue;
+
+    const nameLower = name.toLowerCase();
+    const types: string[] = place.types || [];
+    const isSchool = types.some((t) =>
+      ["school", "educational_institution", "primary_school", "secondary_school"].includes(t)
+    );
+    const hasKeywords = [
+      "tuition", "tuisyen", "academy", "learning", "education",
+      "pusat", "centre", "center", "enrichment", "kumon",
+    ].some((k) => nameLower.includes(k));
+
+    // Skip generic places Google returns as filler (malls, convention centres…).
+    if (!isSchool && !hasKeywords) continue;
+
+    const address: string = place.formatted_address || "";
+    const state = parseState(address, location);
+    const city = state;
+    const subjects = extractSubjectsFromText(name);
+    const lat = place.geometry?.location?.lat;
+    const lng = place.geometry?.location?.lng;
+    const logoUrl =
+      place.photos?.[0]?.photo_reference
+        ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${place.photos[0].photo_reference}&key=${apiKey}`
+        : undefined;
+
+    const existing = await TuitionCentre.findOne(
+      place.place_id ? { $or: [{ googlePlaceId: place.place_id }, { name }] } : { name }
+    );
+
+    if (existing) {
+      existing.averageRating = place.rating ?? existing.averageRating;
+      existing.reviewCount = place.user_ratings_total ?? existing.reviewCount;
+      if (!existing.googlePlaceId && place.place_id) existing.googlePlaceId = place.place_id;
+      if (lat) existing.latitude = lat;
+      if (lng) existing.longitude = lng;
+      if (lat && lng) existing.location = { type: "Point", coordinates: [lng, lat] };
+      if ((!existing.subjects || existing.subjects.length === 0) && subjects.length) {
+        existing.subjects = subjects;
+        existing.markModified("subjects");
+      }
+      if (!existing.logoUrl && logoUrl) existing.logoUrl = logoUrl;
+      await existing.save();
+    } else {
+      await TuitionCentre.create({
+        name,
+        description: "Discovered via Google Maps. Contact the centre for more details.",
+        address: address || "Address not provided",
+        city,
+        state,
+        subjects,
+        priceRange: mapPriceLevel(place.price_level),
+        teachingMode: "physical",
+        status: "approved",
+        averageRating: place.rating || 0,
+        reviewCount: place.user_ratings_total || 0,
+        logoUrl,
+        googlePlaceId: place.place_id,
+        latitude: lat,
+        longitude: lng,
+        location: lat && lng ? { type: "Point", coordinates: [lng, lat] } : undefined,
+      });
+      discovered++;
+    }
+  }
+
+  return { discovered, refreshed: true };
+}
+
 export async function scrapeLocation(locationQuery: string) {
     try {
         await dbConnect();

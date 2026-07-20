@@ -16,6 +16,7 @@ import { Review } from "@/models/Review";
 import { approveCentreAction, rejectCentreAction, verifyCentreAction, approveClaimRequestAction, rejectClaimRequestAction } from "./actions";
 import ScrapeButton from "@/components/admin/ScrapeButton";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
+import { ActionModal } from "@/components/ui/action-modal";
 
 export default async function AdminDashboard() {
   const session = await getServerSession(authOptions);
@@ -151,16 +152,30 @@ export default async function AdminDashboard() {
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <form action={approveCentreAction.bind(null, centre._id.toString())} className="flex-1">
-                            <Button type="submit" size="sm" className="w-full h-8 text-xs bg-emerald-500 hover:bg-emerald-600 text-white">
-                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Approve
-                            </Button>
-                          </form>
-                          <form action={rejectCentreAction.bind(null, centre._id.toString())}>
-                            <Button type="submit" size="sm" variant="ghost" className="h-8 px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">
-                              <XCircle className="w-4 h-4" /> Reject
-                            </Button>
-                          </form>
+                          <ActionModal 
+                             triggerBtn={
+                               <Button size="sm" className="w-full h-8 text-xs bg-emerald-500 hover:bg-emerald-600 text-white">
+                                 <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Approve
+                               </Button>
+                             }
+                             title="Approve Centre"
+                             description={`Are you sure you want to approve "${centre.name}"? It will become visible on the directory.`}
+                             confirmBtnText="Yes, Approve"
+                             confirmBtnVariant="default"
+                             action={approveCentreAction.bind(null, centre._id.toString())}
+                          />
+                          <ActionModal 
+                             triggerBtn={
+                               <Button size="sm" variant="ghost" className="h-8 px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">
+                                 <XCircle className="w-4 h-4" /> Reject
+                               </Button>
+                             }
+                             title="Reject Centre"
+                             description={`Are you sure you want to reject and delete "${centre.name}"?`}
+                             confirmBtnText="Yes, Reject"
+                             confirmBtnVariant="destructive"
+                             action={rejectCentreAction.bind(null, centre._id.toString())}
+                          />
                         </div>
                       </div>
                     ))
@@ -202,11 +217,18 @@ export default async function AdminDashboard() {
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <form action={verifyCentreAction.bind(null, centre._id.toString())} className="flex-1">
-                            <Button type="submit" size="sm" className="w-full h-8 text-xs bg-indigo-500 hover:bg-indigo-600 text-white">
-                              <ShieldCheck className="w-3.5 h-3.5 mr-1" /> Mark Verified
-                            </Button>
-                          </form>
+                          <ActionModal 
+                             triggerBtn={
+                               <Button size="sm" className="w-full h-8 text-xs bg-indigo-500 hover:bg-indigo-600 text-white">
+                                 <ShieldCheck className="w-3.5 h-3.5 mr-1" /> Mark Verified
+                               </Button>
+                             }
+                             title="Verify Centre"
+                             description={`Are you sure you want to manually verify "${centre.name}"?`}
+                             confirmBtnText="Yes, Verify"
+                             confirmBtnVariant="default"
+                             action={verifyCentreAction.bind(null, centre._id.toString())}
+                          />
                         </div>
                       </div>
                     ))
@@ -254,16 +276,30 @@ export default async function AdminDashboard() {
                         </div>
 
                         <div className="flex gap-2">
-                          <form action={approveClaimRequestAction.bind(null, claim._id.toString())} className="flex-1">
-                            <Button type="submit" size="sm" className="w-full h-8 text-xs bg-emerald-500 hover:bg-emerald-600 text-white">
-                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Approve & Verify
-                            </Button>
-                          </form>
-                          <form action={rejectClaimRequestAction.bind(null, claim._id.toString())}>
-                            <Button type="submit" size="sm" variant="ghost" className="h-8 px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">
-                              <XCircle className="w-4 h-4" /> Reject
-                            </Button>
-                          </form>
+                          <ActionModal 
+                             triggerBtn={
+                               <Button size="sm" className="w-full h-8 text-xs bg-emerald-500 hover:bg-emerald-600 text-white">
+                                 <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Approve & Verify
+                               </Button>
+                             }
+                             title="Approve Claim"
+                             description={`Are you sure you want to approve this claim? Ownership of the centre will be transferred to ${claim.userId?.name}.`}
+                             confirmBtnText="Yes, Approve Claim"
+                             confirmBtnVariant="default"
+                             action={approveClaimRequestAction.bind(null, claim._id.toString())}
+                          />
+                          <ActionModal 
+                             triggerBtn={
+                               <Button size="sm" variant="ghost" className="h-8 px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30">
+                                 <XCircle className="w-4 h-4" /> Reject
+                               </Button>
+                             }
+                             title="Reject Claim"
+                             description="Are you sure you want to reject this claim? The request will be permanently deleted."
+                             confirmBtnText="Yes, Reject"
+                             confirmBtnVariant="destructive"
+                             action={rejectClaimRequestAction.bind(null, claim._id.toString())}
+                          />
                         </div>
                       </div>
                     ))

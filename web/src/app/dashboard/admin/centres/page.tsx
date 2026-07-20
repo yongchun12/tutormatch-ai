@@ -11,6 +11,7 @@ import Link from "next/link";
 import { approveCentreAction, rejectCentreAction, deleteCentreAction } from "../actions";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SyncButton } from "./SyncButton";
+import { ActionModal } from "@/components/ui/action-modal";
 
 export default async function ManageCentres(props: {
     searchParams: Promise<{ page?: string }>
@@ -85,18 +86,32 @@ export default async function ManageCentres(props: {
                                         </td>
                                         <td className="px-6 py-4 text-right flex items-center justify-end gap-2">
                                             {centre.status === "pending" && (
-                                                <form action={approveCentreAction.bind(null, centre._id.toString())}>
-                                                    <Button type="submit" size="sm" className="h-8 bg-emerald-500 hover:bg-emerald-600 text-white">
-                                                        <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Approve
-                                                    </Button>
-                                                </form>
+                                                <ActionModal 
+                                                    triggerBtn={
+                                                        <Button size="sm" className="h-8 bg-emerald-500 hover:bg-emerald-600 text-white">
+                                                            <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Approve
+                                                        </Button>
+                                                    }
+                                                    title="Approve Centre"
+                                                    description={`Are you sure you want to approve "${centre.name}"? It will become publicly visible.`}
+                                                    confirmBtnText="Yes, Approve"
+                                                    confirmBtnVariant="default"
+                                                    action={approveCentreAction.bind(null, centre._id.toString())}
+                                                />
                                             )}
                                             {centre.status === "pending" && (
-                                                <form action={rejectCentreAction.bind(null, centre._id.toString())}>
-                                                    <Button type="submit" size="sm" variant="ghost" className="h-8 px-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30">
-                                                        <XCircle className="w-4 h-4" /> Reject
-                                                    </Button>
-                                                </form>
+                                                <ActionModal 
+                                                    triggerBtn={
+                                                        <Button size="sm" variant="ghost" className="h-8 px-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30">
+                                                            <XCircle className="w-4 h-4" /> Reject
+                                                        </Button>
+                                                    }
+                                                    title="Reject Centre"
+                                                    description={`Are you sure you want to reject and delete "${centre.name}"? This action cannot be undone.`}
+                                                    confirmBtnText="Yes, Reject"
+                                                    confirmBtnVariant="destructive"
+                                                    action={rejectCentreAction.bind(null, centre._id.toString())}
+                                                />
                                             )}
                                             <SyncButton centreId={centre._id.toString()} hasWebsite={!!centre.website} />
                                             <Link href={`/dashboard/admin/centres/${centre._id.toString()}/edit`}>
@@ -104,11 +119,18 @@ export default async function ManageCentres(props: {
                                                     <Edit className="w-4 h-4 mr-1" /> Edit
                                                 </Button>
                                             </Link>
-                                            <form action={deleteCentreAction.bind(null, centre._id.toString())}>
-                                                <Button type="submit" size="sm" variant="outline" className="h-8 px-2 text-rose-500 border-rose-200 hover:bg-rose-50 dark:border-rose-900/50 dark:hover:bg-rose-950/30">
-                                                    Delete
-                                                </Button>
-                                            </form>
+                                            <ActionModal 
+                                                triggerBtn={
+                                                    <Button size="sm" variant="outline" className="h-8 px-2 text-rose-500 border-rose-200 hover:bg-rose-50 dark:border-rose-900/50 dark:hover:bg-rose-950/30">
+                                                        Delete
+                                                    </Button>
+                                                }
+                                                title="Delete Centre"
+                                                description={`Are you sure you want to completely delete "${centre.name}"? All associated reviews will also be orphaned or deleted. This action cannot be undone.`}
+                                                confirmBtnText="Yes, Delete"
+                                                confirmBtnVariant="destructive"
+                                                action={deleteCentreAction.bind(null, centre._id.toString())}
+                                            />
                                         </td>
                                     </tr>
                                 ))}
