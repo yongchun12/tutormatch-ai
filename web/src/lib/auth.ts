@@ -29,11 +29,19 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        return { 
-          id: user._id.toString(), 
-          name: user.name, 
-          email: user.email, 
-          role: user.role 
+        // Block sign-in until the email is activated. Existing/seeded accounts
+        // without the field (undefined) are treated as already verified, so only
+        // newly-registered users (emailVerified === false) are gated. The thrown
+        // message is surfaced to the client so it can offer to resend the link.
+        if (user.emailVerified === false) {
+          throw new Error("EMAIL_NOT_VERIFIED");
+        }
+
+        return {
+          id: user._id.toString(),
+          name: user.name,
+          email: user.email,
+          role: user.role
         };
       }
     })

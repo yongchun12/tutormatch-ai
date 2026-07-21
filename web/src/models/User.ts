@@ -5,6 +5,11 @@ export interface IUser extends Document {
   email: string;
   passwordHash: string;
   role: "student" | "owner" | "admin";
+  emailVerified?: boolean;
+  verificationToken?: string;
+  verificationTokenExpiry?: Date;
+  resetPasswordToken?: string;
+  resetPasswordTokenExpiry?: Date;
   subjectsNeeded?: string[];
   preferredLocation?: string;
   maxPrice?: number;
@@ -22,6 +27,14 @@ const UserSchema: Schema<IUser> = new Schema(
     email: { type: String, required: true, unique: true },
     passwordHash: { type: String, required: true },
     role: { type: String, enum: ["student", "owner", "admin"], default: "student" },
+    // Email activation. `emailVerified` gates login for newly-registered users;
+    // existing/seeded users without the field are treated as already verified.
+    emailVerified: { type: Boolean, default: false },
+    verificationToken: { type: String },
+    verificationTokenExpiry: { type: Date },
+    // Forgot-password flow (tokens are stored hashed; the raw token is emailed).
+    resetPasswordToken: { type: String },
+    resetPasswordTokenExpiry: { type: Date },
     subjectsNeeded: { type: [String] },
     preferredLocation: { type: String },
     maxPrice: { type: Number },

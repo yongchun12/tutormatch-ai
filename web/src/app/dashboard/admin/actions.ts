@@ -142,6 +142,7 @@ export async function adminCreateUserAction(formData: FormData) {
         email,
         passwordHash,
         role,
+        emailVerified: true, // admin-created accounts are pre-activated
     });
 
     revalidatePath("/dashboard/admin/users");

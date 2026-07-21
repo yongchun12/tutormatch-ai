@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
@@ -10,33 +10,62 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
+
+  // Show a status banner based on the query flag set by the verify / reset flows.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const verify = params.get("verify");
+    const reset = params.get("reset");
+    if (verify === "success") setNotice("Your email is verified — you can now sign in.");
+    else if (verify === "invalid") setError("That activation link is invalid or has expired. Try resending it below.");
+    else if (verify === "error") setError("We couldn't verify your email. Please try again.");
+    else if (reset === "success") setNotice("Your password has been updated — please sign in.");
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Uses NextAuth Credentials provider
-    const res = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    setError("");
+    setNeedsVerification(false);
+
+    const res = await signIn("credentials", { email, password, redirect: false });
 
     if (res?.error) {
-      alert("Invalid credentials");
+      if (res.error.includes("EMAIL_NOT_VERIFIED")) {
+        setNeedsVerification(true);
+        setError("Your email isn't verified yet. Please activate your account.");
+      } else {
+        setError("Invalid email or password.");
+      }
       return;
     }
 
-    // Fetch the real session from the server to get the user's actual role
+    // Fetch the real session to route by role.
     const { getSession } = await import("next-auth/react");
     const session = await getSession();
     const role = (session?.user as any)?.role;
 
-    if (role === "admin") {
-      router.push("/dashboard/admin");
-    } else if (role === "owner") {
-      router.push("/dashboard/owner");
-    } else {
-      router.push("/dashboard/student");
+    if (role === "admin") router.push("/dashboard/admin");
+    else if (role === "owner") router.push("/dashboard/owner");
+    else router.push("/dashboard/student");
+  };
+
+  const handleResend = async () => {
+    if (resendState === "sending" || !email.trim()) return;
+    setResendState("sending");
+    try {
+      await fetch("/api/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    } catch {
+      // Ignore — generic confirmation below.
+    } finally {
+      setResendState("sent");
     }
   };
 
@@ -48,25 +77,55 @@ export default function LoginPage() {
           <p className="text-slate-500 dark:text-slate-400">Sign in to your account to continue</p>
         </div>
 
+        {notice && (
+          <div className="mb-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 p-3 text-sm text-emerald-700 dark:text-emerald-400">
+            {notice}
+          </div>
+        )}
+
+        {error && (
+          <div className="mb-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 p-3 text-sm text-red-600 dark:text-red-400">
+            {error}
+            {needsVerification && (
+              <div className="mt-2">
+                {resendState === "sent" ? (
+                  <span className="text-slate-600 dark:text-slate-300">
+                    If your account isn&apos;t verified yet, a new activation link is on its way.
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    disabled={resendState === "sending"}
+                    className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-60"
+                  >
+                    {resendState === "sending" ? "Sending…" : "Resend activation email"}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         <form className="space-y-4" onSubmit={handleLogin}>
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email Address</label>
-            <input 
-              type="email" 
+            <input
+              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white"
-              placeholder="student@test.com"
+              placeholder="you@example.com"
               required
             />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Password</label>
-              <Link href="#" className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Forgot password?</Link>
+              <Link href="/auth/forgot-password" className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Forgot password?</Link>
             </div>
-            <input 
-              type="password" 
+            <input
+              type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white"
@@ -74,7 +133,7 @@ export default function LoginPage() {
               required
             />
           </div>
-          
+
           <Button type="submit" className="w-full py-6 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md text-base mt-4">
             Sign In
           </Button>
@@ -90,7 +149,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center mt-8 text-slate-500 dark:text-slate-400">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <Link href="/auth/register" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">
             Sign up
           </Link>
