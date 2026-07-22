@@ -10,6 +10,7 @@ import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { Enquiry } from "@/models/Enquiry";
 import { SystemLog } from "@/models/SystemLog";
+import AdminLiveLogs from "@/components/admin/AdminLiveLogs";
 import { ClaimRequest } from "@/models/ClaimRequest";
 import { User } from "@/models/User";
 import { Review } from "@/models/Review";
@@ -171,7 +172,7 @@ export default async function AdminDashboard() {
                                </Button>
                              }
                              title="Reject Centre"
-                             description={`Are you sure you want to reject and delete "${centre.name}"?`}
+                             description={`Reject "${centre.name}"? It will be hidden from the public directory but kept for the audit trail. You can approve it again later.`}
                              confirmBtnText="Yes, Reject"
                              confirmBtnVariant="destructive"
                              action={rejectCentreAction.bind(null, centre._id.toString())}
@@ -322,29 +323,15 @@ export default async function AdminDashboard() {
                 </div>
               </CardHeader>
               <CardContent className="p-0 bg-slate-950 flex-1 relative h-64 overflow-hidden">
-                <div className="absolute inset-0 p-4 font-mono text-xs overflow-y-auto space-y-3">
-                  {systemLogs.length === 0 ? (
-                    <div className="text-slate-500 text-center mt-8">No logs recorded yet.</div>
-                  ) : (
-                    systemLogs.map((log) => {
-                      let levelColor = "text-slate-500";
-                      if (log.level === "SUCCESS") levelColor = "text-emerald-500";
-                      if (log.level === "WARN") levelColor = "text-amber-500";
-                      if (log.level === "ERROR") levelColor = "text-rose-500";
-
-                      const timeString = new Date(log.createdAt).toLocaleTimeString('en-US', { hour12: false });
-                      
-                      return (
-                        <div key={log._id.toString()} className="flex flex-col">
-                          <span className={`${levelColor} font-bold`}>
-                            [{timeString}] {log.level}:
-                          </span> 
-                          <span className="text-slate-300 ml-2">{log.message}</span>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+                <AdminLiveLogs
+                  initialLogs={systemLogs.map((log: any) => ({
+                    id: log._id.toString(),
+                    level: log.level,
+                    source: log.source,
+                    message: log.message,
+                    createdAt: log.createdAt ? new Date(log.createdAt).toISOString() : new Date().toISOString(),
+                  }))}
+                />
               </CardContent>
             </Card>
           </div>

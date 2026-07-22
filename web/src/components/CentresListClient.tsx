@@ -2,15 +2,17 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
-import { MapPin, Star, Clock, Heart, Search, Sparkles, Navigation, Map, X } from "lucide-react";
+import { MapPin, Star, Clock, Search, Sparkles, Navigation, Map, X, ShieldCheck } from "lucide-react";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Loader2 } from "lucide-react";
 import CompareModal from "./CompareModal";
+import SaveCentreButton from "./SaveCentreButton";
+import { useToast } from "@/components/ui/toast";
 
 // Haversine formula to calculate distance between two coordinates in km
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -26,9 +28,12 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return distance;
 }
 
-export default function CentresListClient({ initialCentres }: { initialCentres: any[] }) {
+export default function CentresListClient({ initialCentres, savedCentreIds = [] }: { initialCentres: any[]; savedCentreIds?: string[] }) {
   const [allCentres, setAllCentres] = useState<any[]>(initialCentres);
+  const savedIds = useMemo(() => new Set(savedCentreIds), [savedCentreIds]);
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { toast } = useToast();
   
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [locationName, setLocationName] = useState<string>("");
@@ -47,7 +52,8 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
   const locBoxRef = useRef<HTMLDivElement>(null);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [selectedMode, setSelectedMode] = useState<string>("All");
-  const [maxFee, setMaxFee] = useState<number>(300);
+  const FEE_MAX = 500; // slider maximum; at this value the fee filter is "off" (no limit)
+  const [maxFee, setMaxFee] = useState<number>(FEE_MAX);
   const [sortOrder, setSortOrder] = useState<string>("Recommended");
   
   // Crawling State
@@ -66,7 +72,7 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
       if (compareList.length < 3) {
         setCompareList([...compareList, centre]);
       } else {
-        alert("You can only compare up to 3 centres at a time.");
+        toast("You can only compare up to 3 centres at a time.", "info");
       }
     }
   };
@@ -183,23 +189,30 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
       result = result.filter(c => {
         let passesGeneral = true;
         if (q) {
-          passesGeneral = 
-            c.name?.toLowerCase().includes(q) || 
-            c.subjects?.some((s: string) => s.toLowerCase().includes(q));
+          const subjects: string[] = c.subjects || [];
+          // Match on name or a listed subject. Crawled centres often have no
+          // subjects tagged yet — don't hide those on a subject search, since we
+          // simply don't know their subjects (better to show than to lose them).
+          const hasNoSubjects = subjects.length === 0;
+          passesGeneral =
+            c.name?.toLowerCase().includes(q) ||
+            subjects.some((s) => s.toLowerCase().includes(q)) ||
+            hasNoSubjects;
         }
-        
+
         // When we have real coordinates, filter by distance (radius) below —
         // don't also text-filter by location, or it double-restricts results.
         let passesLoc = true;
         if (!userLocation && (lq || addrQ)) {
-          const locSearchTerm = lq || addrQ;
-          const termAlias = locSearchTerm.replace('penang', 'pinang');
-          passesLoc =
-            c.location?.toLowerCase().includes(termAlias) ||
-            c.description?.toLowerCase().includes(termAlias) ||
-            c.name?.toLowerCase().includes(termAlias);
+          const locSearchTerm = (lq || addrQ).replace('penang', 'pinang');
+          const hay = `${c.location || ''} ${c.description || ''} ${c.name || ''}`.toLowerCase();
+          // Match the full term, or any significant word from it. This makes
+          // landmark searches ("Subang Jaya Medical Centre") match a centre whose
+          // location is just "Subang Jaya, Selangor".
+          const words = locSearchTerm.split(/[\s,]+/).filter((w) => w.length >= 4);
+          passesLoc = hay.includes(locSearchTerm) || words.some((w) => hay.includes(w));
         }
-        
+
         return passesGeneral && passesLoc;
       });
     }
@@ -216,19 +229,21 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
       result = result.filter(c => c.mode?.toLowerCase() === selectedMode.toLowerCase());
     }
 
-    // 4. Max Fee Filter
-    // Parse the price string (e.g. "RM 100 - RM 200") to get the max value
-    result = result.filter(c => {
-      if (!c.price) return true; // If no price listed, keep it
-      const priceStr = c.price.toString().replace(/[^0-9-]/g, '');
-      const parts = priceStr.split('-');
-      // Check the lower bound or the only value
-      const priceVal = parseInt(parts[0], 10);
-      if (!isNaN(priceVal)) {
-        return priceVal <= maxFee;
-      }
-      return true;
-    });
+    // 4. Max Fee Filter — only when the parent has actually set a budget below
+    //    the maximum. At FEE_MAX the filter is off, so nothing is hidden by default.
+    if (maxFee < FEE_MAX) {
+      result = result.filter(c => {
+        if (!c.price) return true; // If no price listed, keep it
+        const priceStr = c.price.toString().replace(/[^0-9-]/g, '');
+        const parts = priceStr.split('-');
+        // Compare the starting (lowest) price against the budget.
+        const priceVal = parseInt(parts[0], 10);
+        if (!isNaN(priceVal)) {
+          return priceVal <= maxFee;
+        }
+        return true; // Non-numeric prices (e.g. "Contact for pricing") are kept.
+      });
+    }
 
     // 4. Location Radius & Distance
     if (userLocation) {
@@ -408,10 +423,23 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
                       <button
                         key={p.place_id}
                         type="button"
-                        onClick={() => {
+                        onClick={async () => {
                           setLocationQuery(p.description);
                           setShowLocDropdown(false);
                           setLocPredictions([]);
+                          setHasCrawled(false);
+                          // Geocode the picked place so we search by distance
+                          // (robust for landmarks), not by matching address text.
+                          try {
+                            const res = await fetch(`/api/location/geocode?place_id=${p.place_id}`);
+                            const data = await res.json();
+                            if (data.lat && data.lng) {
+                              setUserLocation({ lat: data.lat, lng: data.lng });
+                              setLocationName(p.description);
+                            }
+                          } catch {
+                            /* fall back to text matching */
+                          }
                         }}
                         className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800/50 last:border-0 flex items-start gap-3 transition-colors"
                       >
@@ -487,7 +515,7 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
                     />
                     <div className="flex justify-between text-xs text-slate-500 font-medium">
                       <span>1km</span>
-                      <span>50km</span>
+                      <span>100km</span>
                     </div>
                   </div>
                 )}
@@ -579,13 +607,19 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
             {!isCrawling && processedCentres.length === 0 && (
               <div className="text-center py-16 text-slate-500 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm mb-8">
                 <p className="text-lg font-medium text-slate-900 dark:text-white mb-4">No centres found matching your exact criteria.</p>
-                <Button 
+                <Button
                   onClick={() => {
                     setSearchQuery("");
+                    setLocationQuery("");
                     setSelectedSubjects([]);
                     setSelectedMode("All");
-                    setMaxFee(500);
+                    setMaxFee(FEE_MAX);
                     setRadius(50);
+                    setUserLocation(null);
+                    setLocationName("");
+                    setHasCrawled(false);
+                    // Drop the ?q=&address=&lat=&lng= params so the URL no longer filters.
+                    router.push("/centres");
                   }}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md"
                 >
@@ -602,13 +636,21 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
                     className={`h-32 w-full relative p-4 flex items-start justify-between ${centre.image ? '' : centre.gradient}`}
                     style={centre.image ? { backgroundImage: `url(${centre.image})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}
                   >
-                    <Badge className="bg-white/90 text-slate-900 hover:bg-white border-none font-bold shadow-sm backdrop-blur-md">
-                      <Star className="w-3.5 h-3.5 text-yellow-500 mr-1 fill-yellow-500" />
-                      {centre.rating} ({centre.reviews} reviews)
-                    </Badge>
-                    <button className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center backdrop-blur-md transition-colors text-white">
-                      <Heart className="w-4 h-4" />
-                    </button>
+                    <div className="flex flex-col items-start gap-1.5">
+                      <Badge className="bg-white/90 text-slate-900 hover:bg-white border-none font-bold shadow-sm backdrop-blur-md">
+                        <Star className="w-3.5 h-3.5 text-yellow-500 mr-1 fill-yellow-500" />
+                        {centre.rating > 0 || centre.reviews > 0
+                          ? `${Number(centre.rating || 0).toFixed(1)} (${centre.reviews} reviews)`
+                          : "New"}
+                      </Badge>
+                      {centre.isVerified && (
+                        <Badge className="bg-emerald-500/90 text-white hover:bg-emerald-500 border-none font-semibold shadow-sm backdrop-blur-md">
+                          <ShieldCheck className="w-3.5 h-3.5 mr-1" />
+                          Verified
+                        </Badge>
+                      )}
+                    </div>
+                    <SaveCentreButton centreId={centre.id} initialIsSaved={savedIds.has(centre.id)} />
                   </div>
                   
                   <CardHeader className="pt-4 pb-2">

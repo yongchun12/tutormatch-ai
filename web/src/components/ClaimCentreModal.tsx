@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Loader2, ShieldCheck, Upload } from "lucide-react";
 import { submitClaimRequestAction } from "@/app/dashboard/admin/actions";
+import { useToast } from "@/components/ui/toast";
 
 interface ClaimCentreModalProps {
   isOpen: boolean;
@@ -17,27 +18,28 @@ interface ClaimCentreModalProps {
 export default function ClaimCentreModal({ isOpen, setIsOpen, centreId, centreName, userId }: ClaimCentreModalProps) {
   const [proofMessage, setProofMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) {
-      alert("You must be logged in to claim a centre.");
+      toast("You must be logged in to claim a centre.", "error");
       return;
     }
-    
+
     if (!proofMessage.trim()) {
-      alert("Please provide proof of ownership.");
+      toast("Please provide proof of ownership.", "error");
       return;
     }
 
     try {
       setIsSubmitting(true);
       await submitClaimRequestAction(userId, centreId, proofMessage);
-      alert("Claim Submitted Successfully! Our admins will review your request shortly.");
+      toast("Claim submitted successfully! Our admins will review your request shortly.", "success");
       setIsOpen(false);
       setProofMessage("");
     } catch (error: any) {
-      alert(`Failed to submit claim: ${error.message || "An unexpected error occurred."}`);
+      toast(`Failed to submit claim: ${error.message || "An unexpected error occurred."}`, "error");
     } finally {
       setIsSubmitting(false);
     }

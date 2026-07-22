@@ -4,14 +4,16 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useToast } from "@/components/ui/toast";
 
 export function SyncButton({ centreId, hasWebsite }: { centreId: string, hasWebsite: boolean }) {
     const [loading, setLoading] = useState(false);
     const router = useRouter();
+    const { toast } = useToast();
 
     const handleSync = async () => {
         if (!hasWebsite) {
-            alert("This centre does not have a website URL saved to sync from.");
+            toast("This centre does not have a website URL saved to sync from.", "info");
             return;
         }
 
@@ -21,15 +23,15 @@ export function SyncButton({ centreId, hasWebsite }: { centreId: string, hasWebs
                 method: "POST",
             });
             const data = await res.json();
-            
+
             if (data.success) {
-                alert("AI Sync successful! Data has been updated.");
+                toast("AI Sync successful! Data has been updated.", "success");
                 router.refresh(); // Refresh the page to see changes
             } else {
-                alert(`AI Sync failed: ${data.message || data.error}`);
+                toast(`AI Sync failed: ${data.message || data.error}`, "error");
             }
         } catch (error: any) {
-            alert(`Error: ${error.message}`);
+            toast(`Error: ${error.message}`, "error");
         } finally {
             setLoading(false);
         }

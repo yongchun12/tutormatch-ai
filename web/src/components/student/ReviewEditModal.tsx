@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Edit, Star, Trash2 } from "lucide-react";
 import { updateReviewAction, deleteReviewAction } from "@/app/dashboard/student/reviews/actions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ActionModal } from "@/components/ui/action-modal";
 
 interface ReviewEditModalProps {
   reviewId: string;
@@ -28,14 +29,6 @@ export default function ReviewEditModal({ reviewId, initialRating, initialCommen
     await updateReviewAction(reviewId, formData);
     setLoading(false);
     setOpen(false);
-  }
-
-  async function handleDelete() {
-    if (confirm("Are you sure you want to delete this review?")) {
-      setLoading(true);
-      await deleteReviewAction(reviewId);
-      setLoading(false);
-    }
   }
 
   return (
@@ -97,16 +90,22 @@ export default function ReviewEditModal({ reviewId, initialRating, initialCommen
         </DialogContent>
         </Dialog>
 
-        <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={handleDelete}
-            disabled={loading}
-            className="h-8 px-2 text-rose-500 border-rose-200 hover:bg-rose-50 dark:border-rose-900/50 dark:hover:bg-rose-950/30"
-        >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1" />} 
-            Delete
-        </Button>
+        <ActionModal
+            triggerBtn={
+                <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 px-2 text-rose-500 border-rose-200 hover:bg-rose-50 dark:border-rose-900/50 dark:hover:bg-rose-950/30"
+                >
+                    <Trash2 className="w-4 h-4 mr-1" /> Delete
+                </Button>
+            }
+            title="Delete Review"
+            description="Are you sure you want to delete this review? This action cannot be undone."
+            confirmBtnText="Yes, Delete"
+            confirmBtnVariant="destructive"
+            action={async () => { await deleteReviewAction(reviewId); }}
+        />
     </div>
   );
 }

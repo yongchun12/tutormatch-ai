@@ -107,7 +107,7 @@ export default async function ManageCentres(props: {
                                                         </Button>
                                                     }
                                                     title="Reject Centre"
-                                                    description={`Are you sure you want to reject and delete "${centre.name}"? This action cannot be undone.`}
+                                                    description={`Reject "${centre.name}"? It will be hidden from the public directory but kept for the audit trail. You can approve it again later.`}
                                                     confirmBtnText="Yes, Reject"
                                                     confirmBtnVariant="destructive"
                                                     action={rejectCentreAction.bind(null, centre._id.toString())}

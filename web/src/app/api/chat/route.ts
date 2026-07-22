@@ -49,7 +49,10 @@ function toCard(r: CentreDoc) {
 }
 
 function findCentres(filter: Record<string, unknown>) {
-  return TuitionCentre.find({ status: "approved", ...filter })
+  // The advisor searches every real listing regardless of approval state, since
+  // "approved" only reflects admin/ownership workflow — not whether the centre
+  // exists. Only admin-"rejected" listings are excluded.
+  return TuitionCentre.find({ status: { $ne: "rejected" }, ...filter })
     .sort({ averageRating: -1, reviewCount: -1 })
     .limit(5)
     .select(CARD_FIELDS)
@@ -121,13 +124,16 @@ Never claim there are no centres when the cards contain suggestions.`,
               }
             }
 
+            // Match on the area word (e.g. "Subang" from "Subang Jaya Medical
+            // Centre") so a landmark still matches centres stored as "Subang Jaya".
+            const locTerm = loc.split(/[\s,]+/).find((w) => w.length >= 4) || loc;
             const locFilter =
               loc !== ""
                 ? {
                     $or: [
-                      { city: { $regex: loc, $options: "i" } },
-                      { state: { $regex: loc, $options: "i" } },
-                      { address: { $regex: loc, $options: "i" } },
+                      { city: { $regex: locTerm, $options: "i" } },
+                      { state: { $regex: locTerm, $options: "i" } },
+                      { address: { $regex: locTerm, $options: "i" } },
                     ],
                   }
                 : {};

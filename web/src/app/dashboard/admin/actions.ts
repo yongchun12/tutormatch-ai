@@ -167,6 +167,7 @@ export async function createCentreAction(formData: FormData) {
 
     const name = formData.get("name") as string;
     const ownerId = formData.get("ownerId") as string;
+    const address = formData.get("address") as string;
     const city = formData.get("city") as string;
     const state = formData.get("state") as string;
     const description = formData.get("description") as string;
@@ -178,6 +179,7 @@ export async function createCentreAction(formData: FormData) {
     await TuitionCentre.create({
         name,
         ownerId: ownerId || undefined,
+        address,
         city,
         state,
         description,
@@ -197,6 +199,7 @@ export async function updateCentreAction(formData: FormData) {
     const id = formData.get("id") as string;
     const name = formData.get("name") as string;
     const ownerId = formData.get("ownerId") as string;
+    const address = formData.get("address") as string;
     const city = formData.get("city") as string;
     const state = formData.get("state") as string;
     const description = formData.get("description") as string;
@@ -208,6 +211,7 @@ export async function updateCentreAction(formData: FormData) {
     await TuitionCentre.findByIdAndUpdate(id, {
         name,
         ownerId: ownerId || undefined,
+        address,
         city,
         state,
         description,

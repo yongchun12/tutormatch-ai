@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { Sparkles, Heart, BookOpen, Settings, Star } from "lucide-react";
+import { Sparkles, Heart, BookOpen, Settings, Star, SlidersHorizontal } from "lucide-react";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
 import { SessionProviderWrapper } from "@/components/providers/SessionProviderWrapper";
 import dbConnect from "@/lib/db";
@@ -42,6 +42,9 @@ export default async function StudentLayout({
         <nav className="flex-1 space-y-2">
           <Link href="/dashboard/student" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <Sparkles className="w-5 h-5" /> Recommendations
+          </Link>
+          <Link href="/preferences" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-400 font-medium transition-colors">
+            <SlidersHorizontal className="w-5 h-5" /> My Preferences
           </Link>
           <Link href="/dashboard/student/saved" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-400 text-slate-600 dark:text-slate-400 font-medium transition-colors">
             <Heart className="w-5 h-5" /> Saved Centres

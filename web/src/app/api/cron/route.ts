@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/db';
 import { TuitionCentre } from '@/models/TuitionCentre';
 import { SystemLog } from '@/models/SystemLog';
+import { extractSubjectsFromText } from '@/services/scraperService';
 
 function mapPriceLevel(level: number | undefined): string {
   if (level === 1) return "Inexpensive ($)";
@@ -73,7 +74,17 @@ export async function GET(request: Request) {
         const detailsRes = await fetch(detailsUrl);
         const detailsData = await detailsRes.json();
         
-        let deducedSubjects = ["Mathematics", "Science", "English", "Bahasa Melayu"];
+        // Deduce subjects from the place name and its Google reviews rather than
+        // tagging every centre with the same generic list (which made subject
+        // filtering meaningless). Fall back to a neutral "General" tag when
+        // nothing subject-specific is detectable — many Google listings simply
+        // don't mention subjects, and inventing four for them is misleading.
+        const reviewText = (detailsData.result?.reviews || [])
+          .map((r: { text?: string }) => r.text || "")
+          .join(" ");
+        const detectedSubjects = extractSubjectsFromText(`${place.name} ${reviewText}`);
+        const deducedSubjects = detectedSubjects.length > 0 ? detectedSubjects : ["General"];
+
         let logoUrl = place.photos && place.photos.length > 0
           ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${place.photos[0].photo_reference}&key=${apiKey}`
           : undefined;

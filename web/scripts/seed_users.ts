@@ -11,24 +11,31 @@ const run = async () => {
 
   await mongoose.connect(MONGODB_URI);
   console.log("Connected.");
-  
-  const salt = await bcrypt.genSalt(10);
-  const passwordHash = await bcrypt.hash("password", salt);
 
-  await User.deleteMany({});
-  await User.create({ name: "System Admin", email: "admin@test.com", passwordHash, role: "admin" });
-  await User.create({ name: "Apex Academy Owner", email: "owner@test.com", passwordHash, role: "owner" });
-  await User.create({
-    name: "John Doe",
-    email: "student@test.com",
-    passwordHash,
-    role: "student",
+  // Pre-verify every demo account (the User schema defaults emailVerified to
+  // false, which blocks login) so a fresh seed is immediately usable.
+  const hash = (pw: string) => bcrypt.hash(pw, 10);
+
+  const studentProfile = {
     subjectsNeeded: ["Additional Math", "Physics"],
     preferredLocation: "Subang Jaya",
     maxPrice: 300,
     latitude: 3.0833,
     longitude: 101.5833,
-  });
+  };
+
+  await User.deleteMany({});
+
+  // Showcase accounts advertised on the login page (password: password123).
+  await User.create({ name: "System Admin", email: "admin@tuition.com", passwordHash: await hash("password123"), role: "admin", emailVerified: true });
+  await User.create({ name: "Apex Academy Owner", email: "owner@tuition.com", passwordHash: await hash("password123"), role: "owner", emailVerified: true });
+  await User.create({ name: "John Doe", email: "student@tuition.com", passwordHash: await hash("password123"), role: "student", emailVerified: true, ...studentProfile });
+
+  // Legacy test accounts (password: password) — kept so older logins still work.
+  await User.create({ name: "System Admin", email: "admin@test.com", passwordHash: await hash("password"), role: "admin", emailVerified: true });
+  await User.create({ name: "Apex Academy Owner", email: "owner@test.com", passwordHash: await hash("password"), role: "owner", emailVerified: true });
+  await User.create({ name: "John Doe", email: "student@test.com", passwordHash: await hash("password"), role: "student", emailVerified: true, ...studentProfile });
+
   console.log("Users created!");
   process.exit(0);
 };

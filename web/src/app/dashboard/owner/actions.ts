@@ -26,6 +26,9 @@ export async function createStarterCentreAction() {
             name: `${ownerName}'s Tuition Centre`,
             description: "Add a description of your tuition centre here.",
             ownerId: (session.user as any).id,
+            // `address` is required by the schema — seed a placeholder the owner
+            // updates from the "Manage Centre" page.
+            address: "Address to be updated",
             city: "Kuala Lumpur",
             state: "Kuala Lumpur",
             subjects: [],

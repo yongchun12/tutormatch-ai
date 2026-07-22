@@ -26,7 +26,9 @@ export async function updateCentreAction(centreId: string, formData: FormData) {
     const contactNumber = formData.get("contactNumber") as string;
     const city = formData.get("city") as string;
     const state = formData.get("state") as string;
-    const location = formData.get("location") as string;
+    const location = formData.get("location") as string; // the full address string
+    const priceRange = formData.get("priceRange") as string;
+    const teachingMode = formData.get("teachingMode") as string;
     const subjectsStr = formData.get("subjects") as string;
     const galleryUrlsStr = formData.get("galleryUrls") as string;
 
@@ -46,7 +48,11 @@ export async function updateCentreAction(centreId: string, formData: FormData) {
     centre.contactNumber = contactNumber;
     centre.city = city;
     centre.state = state;
-    centre.address = location;
+    if (location) centre.address = location; // don't blank out a required field
+    if (priceRange) centre.priceRange = priceRange;
+    if (["online", "physical", "hybrid"].includes(teachingMode)) {
+      centre.teachingMode = teachingMode as "online" | "physical" | "hybrid";
+    }
     centre.subjects = subjects;
     if (galleryUrls.length > 0 || centre.galleryUrls) {
       centre.galleryUrls = galleryUrls;

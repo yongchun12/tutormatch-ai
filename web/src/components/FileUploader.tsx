@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useRef } from "react";
 import { UploadCloud, X, Loader2, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/toast";
 
 interface FileUploaderProps {
   value: string[];
@@ -15,6 +16,7 @@ export default function FileUploader({ value = [], onChange, maxFiles = 10 }: Fi
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -29,17 +31,17 @@ export default function FileUploader({ value = [], onChange, maxFiles = 10 }: Fi
   const uploadFile = async (file: File) => {
     try {
       if (value.length >= maxFiles) {
-        alert(`You can only upload up to ${maxFiles} images.`);
+        toast(`You can only upload up to ${maxFiles} images.`, "info");
         return;
       }
-      
+
       if (!file.type.startsWith("image/")) {
-        alert("Only image files are allowed.");
+        toast("Only image files are allowed.", "error");
         return;
       }
-      
+
       if (file.size > 4 * 1024 * 1024) {
-        alert("File size must be less than 4MB.");
+        toast("File size must be less than 4MB.", "error");
         return;
       }
 
@@ -84,7 +86,7 @@ export default function FileUploader({ value = [], onChange, maxFiles = 10 }: Fi
       
     } catch (error: any) {
       console.error("Upload error:", error);
-      alert(error.message || "Failed to upload image.");
+      toast(error.message || "Failed to upload image.", "error");
     } finally {
       setIsUploading(false);
       setUploadProgress(0);

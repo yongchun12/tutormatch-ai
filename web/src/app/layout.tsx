@@ -3,6 +3,7 @@ import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { SessionProviderWrapper } from "@/components/providers/SessionProviderWrapper";
+import { ToastProvider } from "@/components/ui/toast";
 import { StudentAdvisorChat } from "@/components/chat/StudentAdvisorChat";
 
 const inter = Inter({
@@ -32,9 +33,11 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
         <SessionProviderWrapper>
-          <Navbar />
-          <main className="flex-1 flex flex-col">{children}</main>
-          <StudentAdvisorChat />
+          <ToastProvider>
+            <Navbar />
+            <main className="flex-1 flex flex-col">{children}</main>
+            <StudentAdvisorChat />
+          </ToastProvider>
         </SessionProviderWrapper>
       </body>
     </html>

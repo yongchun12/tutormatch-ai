@@ -46,14 +46,21 @@ export default async function CentresDirectory(props: { searchParams: Promise<{ 
   
   const session = await getServerSession(authOptions);
   let studentProfile = null;
+  let savedCentreIds: string[] = [];
 
-  if (session && session.user && (session.user as any).role === "student") {
+  if (session?.user) {
     const user = await User.findById((session.user as any).id).lean();
     if (user) {
-      studentProfile = {
-        user_id: user._id.toString(),
-        subjects_needed: user.subjectsNeeded && user.subjectsNeeded.length > 0 ? user.subjectsNeeded : [],
-      };
+      // Saved centres for the heart/like button (any signed-in user can save).
+      if (user.savedCentres) {
+        savedCentreIds = user.savedCentres.map((x: any) => x.toString());
+      }
+      if ((session.user as any).role === "student") {
+        studentProfile = {
+          user_id: user._id.toString(),
+          subjects_needed: user.subjectsNeeded && user.subjectsNeeded.length > 0 ? user.subjectsNeeded : [],
+        };
+      }
     }
   }
 
@@ -99,6 +106,7 @@ export default async function CentresDirectory(props: { searchParams: Promise<{ 
       subjects: c.subjects,
       price: c.priceRange,
       mode: c.teachingMode.charAt(0).toUpperCase() + c.teachingMode.slice(1),
+      isVerified: c.isVerified || false,
       aiMatch: aiRec ? Math.round(aiRec.match_score * 100) : null, // Real AI Match (0-100) or null
       image: c.logoUrl || null,
       gradient: getGradient(centreIdStr),
@@ -109,6 +117,6 @@ export default async function CentresDirectory(props: { searchParams: Promise<{ 
 
   // Pass centres to client component for interactivity
   return (
-    <CentresListClient initialCentres={centres} />
+    <CentresListClient initialCentres={centres} savedCentreIds={savedCentreIds} />
   );
 }

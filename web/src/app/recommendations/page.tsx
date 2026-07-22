@@ -7,11 +7,15 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, MapPin, Star, ArrowRight, BrainCircuit, Search } from "lucide-react";
-import { getPublicRecommendationsAction } from "./actions";
+import { Textarea } from "@/components/ui/textarea";
+import { getSmartRecommendationsAction } from "./actions";
 
 export default function PublicRecommendations() {
     const [subjectQuery, setSubjectQuery] = useState("");
     const [subjects, setSubjects] = useState<string[]>([]);
+    const [location, setLocation] = useState("");
+    const [budget, setBudget] = useState("");
+    const [notes, setNotes] = useState("");
     const [loading, setLoading] = useState(false);
     const [recommendations, setRecommendations] = useState<any[]>([]);
     const [searched, setSearched] = useState(false);
@@ -28,7 +32,7 @@ export default function PublicRecommendations() {
         setLoading(true);
         setSearched(true);
         try {
-            const results = await getPublicRecommendationsAction(subjects);
+            const results = await getSmartRecommendationsAction({ subjects, location, budget, notes });
             setRecommendations(results);
         } catch (e) {
             console.error(e);
@@ -87,8 +91,39 @@ export default function PublicRecommendations() {
                         ))}
                     </div>
 
-                    <Button 
-                        onClick={handleGetRecommendations} 
+                    <div className="grid sm:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Preferred area <span className="text-slate-400 font-normal">(optional)</span></label>
+                            <Input
+                                value={location}
+                                onChange={(e) => setLocation(e.target.value)}
+                                placeholder="e.g. Subang Jaya, Penang..."
+                                className="py-5"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Monthly budget <span className="text-slate-400 font-normal">(optional)</span></label>
+                            <Input
+                                value={budget}
+                                onChange={(e) => setBudget(e.target.value)}
+                                placeholder="e.g. under RM 300"
+                                className="py-5"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="mb-6">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Tell us more about your needs <span className="text-slate-400 font-normal">(optional)</span></label>
+                        <Textarea
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            placeholder="e.g. Preparing for SPM, prefers small classes or a female tutor, weekends only, online is fine..."
+                            rows={3}
+                        />
+                    </div>
+
+                    <Button
+                        onClick={handleGetRecommendations}
                         disabled={subjects.length === 0 || loading}
                         className="w-full py-6 text-lg rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-lg shadow-indigo-500/25"
                     >

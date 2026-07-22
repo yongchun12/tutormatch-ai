@@ -27,23 +27,31 @@ const seedData = async () => {
     await Review.deleteMany({});
     
     console.log("⏳ Seeding dummy Users...");
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash("password", salt);
 
-    const admin = await User.create({ name: "System Admin", email: "admin@test.com", passwordHash, role: "admin" });
-    const owner = await User.create({ name: "Apex Academy Owner", email: "owner@test.com", passwordHash, role: "owner" });
-    const student = await User.create({
-      name: "John Doe",
-      email: "student@test.com",
-      passwordHash,
-      role: "student",
+    // All demo accounts are pre-verified so a fresh seed is immediately usable.
+    // (The User schema defaults emailVerified to false, which blocks login.)
+    const hash = (pw: string) => bcrypt.hash(pw, 10);
+
+    // Preferences for the demo student, used by distance/subject recommendations.
+    const studentProfile = {
       subjectsNeeded: ["Additional Math", "Physics"],
       preferredLocation: "Subang Jaya",
       maxPrice: 300,
       // Subang Jaya coordinates, used for distance-based recommendations.
       latitude: 3.0833,
       longitude: 101.5833,
-    });
+    };
+
+    // Showcase accounts advertised on the login page (password: password123).
+    // These own the seeded demo data so the showcase dashboards are populated.
+    const admin = await User.create({ name: "System Admin", email: "admin@tuition.com", passwordHash: await hash("password123"), role: "admin", emailVerified: true });
+    const owner = await User.create({ name: "Apex Academy Owner", email: "owner@tuition.com", passwordHash: await hash("password123"), role: "owner", emailVerified: true });
+    const student = await User.create({ name: "John Doe", email: "student@tuition.com", passwordHash: await hash("password123"), role: "student", emailVerified: true, ...studentProfile });
+
+    // Legacy test accounts (password: password) — kept so older logins still work.
+    await User.create({ name: "System Admin", email: "admin@test.com", passwordHash: await hash("password"), role: "admin", emailVerified: true });
+    await User.create({ name: "Apex Academy Owner", email: "owner@test.com", passwordHash: await hash("password"), role: "owner", emailVerified: true });
+    await User.create({ name: "John Doe", email: "student@test.com", passwordHash: await hash("password"), role: "student", emailVerified: true, ...studentProfile });
 
     console.log("⏳ Seeding dummy Tuition Centres...");
     const centre1 = await TuitionCentre.create({

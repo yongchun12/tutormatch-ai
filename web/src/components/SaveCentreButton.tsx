@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { Heart } from "lucide-react";
 import { toggleSaveCentreAction } from "@/app/centres/[id]/actions";
+import { useToast } from "@/components/ui/toast";
 
 export default function SaveCentreButton({ centreId, initialIsSaved = false, className = "" }: { centreId: string, initialIsSaved?: boolean, className?: string }) {
     const [isSaved, setIsSaved] = useState(initialIsSaved);
     const [isLoading, setIsLoading] = useState(false);
+    const { toast } = useToast();
 
     const handleToggle = async (e: React.MouseEvent) => {
         e.preventDefault();
@@ -21,7 +23,7 @@ export default function SaveCentreButton({ centreId, initialIsSaved = false, cla
             if (!res.success) {
                 // Revert if failed
                 setIsSaved(isSaved);
-                alert(res.error || "Failed to save centre.");
+                toast(res.error || "Failed to save centre.", "error");
             } else {
                 setIsSaved(res.isSaved!);
             }

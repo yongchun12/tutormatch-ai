@@ -21,7 +21,7 @@ const SUBJECT_KEYWORDS: Record<string, string[]> = {
   Accounting: ["account", "akaun", "accounting"],
 };
 
-function extractSubjectsFromText(text: string): string[] {
+export function extractSubjectsFromText(text: string): string[] {
   const found = new Set<string>();
   const lower = text.toLowerCase();
   for (const [subject, keywords] of Object.entries(SUBJECT_KEYWORDS)) {

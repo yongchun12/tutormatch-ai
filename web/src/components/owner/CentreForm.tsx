@@ -70,10 +70,11 @@ export default function CentreForm({ initialData }: CentreFormProps) {
 
         <div className="space-y-2 md:col-span-2">
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Description</label>
-          <Textarea 
-            name="description" 
-            defaultValue={initialData.description} 
+          <Textarea
+            name="description"
+            defaultValue={initialData.description}
             rows={4}
+            required
             className="dark:bg-slate-900"
           />
         </div>
@@ -100,12 +101,36 @@ export default function CentreForm({ initialData }: CentreFormProps) {
 
         <div className="space-y-2 md:col-span-2">
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Full Address</label>
-          <Textarea 
-            name="location" 
-            defaultValue={initialData.location} 
+          <Textarea
+            name="location"
+            defaultValue={initialData.address}
             rows={2}
+            required
             className="dark:bg-slate-900"
           />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Monthly Fee / Price Range</label>
+          <Input
+            name="priceRange"
+            defaultValue={initialData.priceRange}
+            placeholder="e.g. RM 150 - RM 300 / month"
+            className="dark:bg-slate-900"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Teaching Mode</label>
+          <select
+            name="teachingMode"
+            defaultValue={initialData.teachingMode || "physical"}
+            className="flex h-10 w-full rounded-md border border-slate-200 bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950 dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:focus-visible:ring-slate-300"
+          >
+            <option value="physical">Physical (In-person)</option>
+            <option value="online">Online</option>
+            <option value="hybrid">Hybrid</option>
+          </select>
         </div>
 
         <div className="space-y-2 md:col-span-2">

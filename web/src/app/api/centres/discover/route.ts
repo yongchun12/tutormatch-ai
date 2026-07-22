@@ -38,12 +38,16 @@ export async function GET(req: Request) {
       console.error("discover crawl failed:", err);
     }
 
+    // Match on the area word (e.g. "Subang" from "Subang Jaya Medical Centre")
+    // so a specific landmark still matches centres stored as "Subang Jaya, …".
+    const term = location.split(/[\s,]+/).find((w) => w.length >= 4) || location;
+
     const rows = await TuitionCentre.find({
       status: "approved",
       $or: [
-        { city: { $regex: location, $options: "i" } },
-        { state: { $regex: location, $options: "i" } },
-        { address: { $regex: location, $options: "i" } },
+        { city: { $regex: term, $options: "i" } },
+        { state: { $regex: term, $options: "i" } },
+        { address: { $regex: term, $options: "i" } },
       ],
     })
       .sort({ averageRating: -1, reviewCount: -1 })
@@ -64,6 +68,7 @@ export async function GET(req: Request) {
         mode: c.teachingMode
           ? c.teachingMode.charAt(0).toUpperCase() + c.teachingMode.slice(1)
           : "Physical",
+        isVerified: c.isVerified || false,
         aiMatch: null,
         image: c.logoUrl || null,
         gradient: gradientFor(id),

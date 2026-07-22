@@ -1,25 +1,30 @@
 "use client"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
-import { Globe, RefreshCw, CheckCircle2 } from "lucide-react"
+import { Globe, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react"
 
 export default function ScrapeButton() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
+  const [isError, setIsError] = useState(false)
 
   const handleScrape = async () => {
     setLoading(true)
+    setIsError(false)
     setMessage("Scraping live from Google Maps...")
     try {
       const res = await fetch("/api/admin/scrape")
       const data = await res.json()
       if(data.success) {
+        setIsError(false)
         setMessage(`Success! Fetched ${data.stats.totalFetched} | Inserted ${data.stats.inserted} | Updated ${data.stats.updated}`)
       } else {
-        setMessage("Error: " + data.error)
+        setIsError(true)
+        setMessage(`Scrape failed: ${data.error || "Unknown error"}. This is often a transient Google Places hiccup — please try again.`)
       }
     } catch(e) {
-      setMessage("Error calling scraper")
+      setIsError(true)
+      setMessage("Couldn't reach the scraper. Check your connection and try again.")
     }
     setLoading(false)
   }
@@ -35,8 +40,14 @@ export default function ScrapeButton() {
         {loading ? "Scraping in progress..." : "Trigger Google Maps Scraper"}
       </Button>
       {message && (
-        <div className="flex items-center text-sm font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-3 py-1.5 rounded-lg border border-emerald-100 dark:border-emerald-900">
-          {!loading && <CheckCircle2 className="w-4 h-4 mr-1.5" />}
+        <div className={`flex items-center text-sm font-medium px-3 py-1.5 rounded-lg border max-w-sm ${
+          isError
+            ? "text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 border-rose-100 dark:border-rose-900"
+            : "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-100 dark:border-emerald-900"
+        }`}>
+          {!loading && (isError
+            ? <AlertCircle className="w-4 h-4 mr-1.5 shrink-0" />
+            : <CheckCircle2 className="w-4 h-4 mr-1.5 shrink-0" />)}
           {message}
         </div>
       )}

@@ -38,7 +38,12 @@ export default function CentreForm({ initialData }: CentreFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && <div className="text-red-500 bg-red-50 p-3 rounded">{error}</div>}
-      
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Address</label>
+        <Input name="address" defaultValue={initialData?.address} required placeholder="e.g. 12 Jalan SS15/4, Subang Jaya" />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
           <label className="text-sm font-medium">Centre Name</label>
