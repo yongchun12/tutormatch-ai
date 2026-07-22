@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,12 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
   // Filtering & Sorting State
   const [searchQuery, setSearchQuery] = useState("");
   const [locationQuery, setLocationQuery] = useState("");
+
+  // Location autocomplete (combobox) state
+  const [locPredictions, setLocPredictions] = useState<any[]>([]);
+  const [showLocDropdown, setShowLocDropdown] = useState(false);
+  const [locLoading, setLocLoading] = useState(false);
+  const locBoxRef = useRef<HTMLDivElement>(null);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [selectedMode, setSelectedMode] = useState<string>("All");
   const [maxFee, setMaxFee] = useState<number>(300);
@@ -73,12 +79,46 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
     const q = searchParams.get("q");
 
     if (q) setSearchQuery(q);
+    // Show the searched location in the location box (was previously left blank).
+    if (address) setLocationQuery(address);
 
     if (lat && lng) {
       setUserLocation({ lat: parseFloat(lat), lng: parseFloat(lng) });
       if (address) setLocationName(address);
     }
   }, [searchParams]);
+
+  // Debounced Google Places autocomplete for the location box.
+  useEffect(() => {
+    if (!showLocDropdown || locationQuery.trim().length < 3) {
+      setLocPredictions([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        setLocLoading(true);
+        const res = await fetch(`/api/location/autocomplete?q=${encodeURIComponent(locationQuery)}`);
+        const data = await res.json();
+        setLocPredictions(data.predictions || []);
+      } catch {
+        setLocPredictions([]);
+      } finally {
+        setLocLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [locationQuery, showLocDropdown]);
+
+  // Close the location dropdown when clicking outside it.
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (locBoxRef.current && !locBoxRef.current.contains(event.target as Node)) {
+        setShowLocDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Dynamic Subjects from loaded directory
   const dynamicSubjects = useMemo(() => {
@@ -148,11 +188,13 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
             c.subjects?.some((s: string) => s.toLowerCase().includes(q));
         }
         
+        // When we have real coordinates, filter by distance (radius) below —
+        // don't also text-filter by location, or it double-restricts results.
         let passesLoc = true;
-        if (lq || addrQ) {
+        if (!userLocation && (lq || addrQ)) {
           const locSearchTerm = lq || addrQ;
           const termAlias = locSearchTerm.replace('penang', 'pinang');
-          passesLoc = 
+          passesLoc =
             c.location?.toLowerCase().includes(termAlias) ||
             c.description?.toLowerCase().includes(termAlias) ||
             c.name?.toLowerCase().includes(termAlias);
@@ -242,17 +284,27 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
         setCrawlMessage("Searching Google Maps for tuition centres...");
         
         try {
-          const res = await fetch(`/api/crawl/ondemand?address=${encodeURIComponent(targetAddress)}`);
+          // Public, throttled discovery endpoint (the admin /api/crawl/ondemand
+          // is locked down). Returns approved centres for the location.
+          const res = await fetch(`/api/centres/discover?location=${encodeURIComponent(targetAddress)}`);
           const data = await res.json();
-          
-          if (data.newCentres && data.newCentres.length > 0) {
-            setAllCentres(prev => [...prev, ...data.newCentres]);
-            
+          const found: any[] = data.centres || [];
+
+          // Only the centres we don't already have loaded.
+          const existingIds = new Set(allCentres.map((c) => c.id));
+          const newCentres = found.filter((c) => !existingIds.has(c.id));
+
+          if (newCentres.length > 0) {
+            setAllCentres(prev => {
+              const ids = new Set(prev.map((c) => c.id));
+              return [...prev, ...newCentres.filter((c) => !ids.has(c.id))];
+            });
+
             const q = searchQuery.toLowerCase();
             const lq = locationQuery.toLowerCase();
-            
+
             let someVisible = false;
-            for (const c of data.newCentres) {
+            for (const c of newCentres) {
                let passesGeneral = true;
                if (q) {
                  passesGeneral = c.name?.toLowerCase().includes(q) || c.subjects?.some((s: string) => s.toLowerCase().includes(q));
@@ -272,9 +324,9 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
             }
             
             if (!someVisible && (searchQuery.trim() || locationQuery.trim() || selectedSubjects.length > 0)) {
-               setCrawlMessage(`Found ${data.newCentres.length} centres, but they were hidden by your filters. Remove filters to see them!`);
+               setCrawlMessage(`Found ${newCentres.length} centres, but they were hidden by your filters. Remove filters to see them!`);
             } else {
-               setCrawlMessage(`Found ${data.newCentres.length} new centres! Updating...`);
+               setCrawlMessage(`Found ${newCentres.length} new centres! Updating...`);
             }
 
             setTimeout(() => {
@@ -326,15 +378,54 @@ export default function CentresListClient({ initialCentres }: { initialCentres: 
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-              <div className="relative flex-1">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Location (e.g. Subang)..." 
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white shadow-sm"
+              <div className="relative flex-1" ref={locBoxRef}>
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 z-10" />
+                <input
+                  type="text"
+                  placeholder="Location (e.g. Subang)..."
+                  className="w-full pl-10 pr-9 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white shadow-sm"
                   value={locationQuery}
-                  onChange={(e) => setLocationQuery(e.target.value)}
+                  onChange={(e) => {
+                    setLocationQuery(e.target.value);
+                    setShowLocDropdown(true);
+                    // Typing a location overrides any active GPS/coordinate search
+                    // so the text filter applies to what the user just typed.
+                    if (userLocation) {
+                      setUserLocation(null);
+                      setLocationName("");
+                    }
+                  }}
+                  onFocus={() => setShowLocDropdown(true)}
                 />
+                {locLoading && (
+                  <Loader2 className="w-4 h-4 text-indigo-500 animate-spin absolute right-3 top-1/2 -translate-y-1/2" />
+                )}
+
+                {/* Location autocomplete dropdown */}
+                {showLocDropdown && locPredictions.length > 0 && (
+                  <div className="absolute top-[calc(100%+6px)] left-0 right-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl overflow-hidden z-40 max-h-64 overflow-y-auto">
+                    {locPredictions.map((p) => (
+                      <button
+                        key={p.place_id}
+                        type="button"
+                        onClick={() => {
+                          setLocationQuery(p.description);
+                          setShowLocDropdown(false);
+                          setLocPredictions([]);
+                        }}
+                        className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800/50 last:border-0 flex items-start gap-3 transition-colors"
+                      >
+                        <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                        <div className="flex flex-col overflow-hidden">
+                          <span className="text-sm font-medium text-slate-900 dark:text-white truncate">{p.main_text || p.description}</span>
+                          {p.secondary_text && (
+                            <span className="text-xs text-slate-500 truncate">{p.secondary_text}</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <Button 
                 onClick={handleGetLocation}

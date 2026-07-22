@@ -13,7 +13,7 @@ import { User } from "@/models/User";
 import { Review } from "@/models/Review";
 import { aiService, CandidateCentre } from "@/services/aiService";
 
-import { scrapeLocation } from "@/services/scraperService";
+import { discoverAndSyncCentres } from "@/services/scraperService";
 
 // Helper to assign a random gradient based on centre ID string length or char code
 const getGradient = (id: string) => {
@@ -33,11 +33,12 @@ export default async function CentresDirectory(props: { searchParams: Promise<{ 
   // Connect to DB first before any Mongoose operations
   await dbConnect();
 
-  // Auto-crawl if an address is provided in the search
+  // Auto-crawl (live Google Maps refresh) if an address is provided in the
+  // search. Throttled + lightweight, and fails soft so the page still renders.
   if (searchParams?.address) {
     try {
       console.log(`Auto-crawling for location: ${searchParams.address}`);
-      await scrapeLocation(searchParams.address);
+      await discoverAndSyncCentres(searchParams.address);
     } catch (error) {
       console.error("Auto-crawl failed:", error);
     }
@@ -69,7 +70,7 @@ export default async function CentresDirectory(props: { searchParams: Promise<{ 
     city: c.city,
     state: c.state,
     subjects: c.subjects,
-    average_rating: c.averageRating || 4.5,
+    average_rating: c.averageRating || 0,
   }));
 
   // Fetch AI Recommendations if student is logged in
@@ -93,7 +94,7 @@ export default async function CentresDirectory(props: { searchParams: Promise<{ 
       name: c.name,
       description: c.description,
       location: `${c.city}, ${c.state}`,
-      rating: c.averageRating || 4.5, // Fallback if 0
+      rating: c.averageRating || 0, // Real rating (0 = not rated yet), not fabricated
       reviews: c.reviewCount || centreReviews, // Real review count from Google Maps or local
       subjects: c.subjects,
       price: c.priceRange,

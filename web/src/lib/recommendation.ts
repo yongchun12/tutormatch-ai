@@ -37,6 +37,18 @@ export const DEFAULT_WEIGHTS: RecommendationWeights = {
   distance: 0.2,
 };
 
+export interface ScoredCentre {
+  centreId: string;
+  name: string;
+  location: string;
+  matchScore: number;
+  matchReason: string;
+  subjectScore: number;
+  ratingScore: number;
+  distanceScore: number | null;
+  distanceKm: number | null;
+}
+
 /** A candidate centre to be scored. Coordinates are optional. */
 export interface CentreInput {
   centreId: string;
@@ -56,18 +68,6 @@ export interface StudentInput {
   userLat?: number | null;
   userLng?: number | null;
   maxDistanceKm?: number;
-}
-
-export interface ScoredCentre {
-  centreId: string;
-  name: string;
-  location: string;
-  matchScore: number;
-  matchReason: string;
-  subjectScore: number;
-  ratingScore: number;
-  distanceScore: number | null;
-  distanceKm: number | null;
 }
 
 const toRadians = (deg: number): number => (deg * Math.PI) / 180;
@@ -95,8 +95,8 @@ export function haversineDistance(
   const a =
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRadians(lat1)) *
-      Math.cos(toRadians(lat2)) *
-      Math.sin(dLon / 2) ** 2;
+    Math.cos(toRadians(lat2)) *
+    Math.sin(dLon / 2) ** 2;
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return earthRadiusKm * c;
 }
