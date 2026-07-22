@@ -82,24 +82,7 @@ const roundTo = (value: number, decimals: number): number => {
   return Math.round(value * factor) / factor;
 };
 
-/** Great-circle distance between two lat/long points, in kilometres. */
-export function haversineDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-): number {
-  const earthRadiusKm = 6371.0;
-  const dLat = toRadians(lat2 - lat1);
-  const dLon = toRadians(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRadians(lat1)) *
-    Math.cos(toRadians(lat2)) *
-    Math.sin(dLon / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusKm * c;
-}
+
 
 /**
  * Map a distance (km) to a [0, 1] proximity score with linear decay. A centre
@@ -147,6 +130,25 @@ export function wilsonLowerBound(
   const centre = p + (z * z) / (2 * n);
   const margin = z * Math.sqrt((p * (1 - p) + (z * z) / (4 * n)) / n);
   return Math.max(0, (centre - margin) / denominator);
+}
+
+/** Great-circle distance between two lat/long points, in kilometres. */
+export function haversineDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const earthRadiusKm = 6371.0;
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(lat1)) *
+    Math.cos(toRadians(lat2)) *
+    Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusKm * c;
 }
 
 /**
