@@ -20,7 +20,28 @@ import re
 # ---------------------------------------------------------------------------
 
 # Characters that only really appear together when text has been double-encoded.
-_MOJIBAKE_HINT = re.compile(r"[ÂÃ][-¿]|â€|Ã[©¨¢«»]")
+_MOJIBAKE_HINT = re.compile(r"[\u00c2\u00c3][\x80-\xbf]|\u00e2\u20ac|\u00c3[\u00a9\u00a8\u00a2\u00ab\u00bb]")
+
+# Windows-1252 leaves five byte positions undefined, so Python refuses to encode
+# the matching characters. Real damaged text contains them - a closing curly
+# quote arrives as "\u00e2\u20ac\x9d" - so map them straight through to their byte
+# values rather than abandoning an otherwise valid repair.
+_UNDEFINED_CP1252 = {
+    0x81: b"\x81", 0x8D: b"\x8d", 0x8F: b"\x8f", 0x90: b"\x90", 0x9D: b"\x9d",
+}
+
+
+def _to_cp1252_bytes(text):
+    """Encode as cp1252, passing the five undefined positions through."""
+    out = bytearray()
+    for char in text:
+        code = ord(char)
+        if code in _UNDEFINED_CP1252:
+            out += _UNDEFINED_CP1252[code]
+        else:
+            out += char.encode("cp1252")  # raises on genuinely non-1252 text
+    return bytes(out)
+
 
 
 def fix_mojibake(text, max_passes=2):
@@ -39,7 +60,7 @@ def fix_mojibake(text, max_passes=2):
         if not _MOJIBAKE_HINT.search(result):
             break
         try:
-            repaired = result.encode("cp1252").decode("utf-8")
+            repaired = _to_cp1252_bytes(result).decode("utf-8")
         except (UnicodeEncodeError, UnicodeDecodeError):
             break  # not this kind of damage; leave it alone
         if repaired == result:
@@ -64,6 +85,8 @@ def fix_mojibake(text, max_passes=2):
 
 _ONLINE_TERMS = [
     "online class", "online classes", "online tuition", "online lesson",
+    "tuition online", "classes online", "lessons online", "teaching online",
+    "learn online", "learning online", "online learning platform",
     "online learning", "e-learning", "elearning", "virtual class",
     "virtual classroom", "zoom", "google meet", "microsoft teams",
     "webinar", "kelas online", "secara online", "live online",
