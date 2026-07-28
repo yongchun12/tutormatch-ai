@@ -18,6 +18,7 @@ import { approveCentreAction, rejectCentreAction, verifyCentreAction, approveCla
 import ScrapeButton from "@/components/admin/ScrapeButton";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
 import { ActionModal } from "@/components/ui/action-modal";
+import { formatLocation } from "@/lib/centre-display";
 
 export default async function AdminDashboard() {
   const session = await getServerSession(authOptions);
@@ -149,7 +150,7 @@ export default async function AdminDashboard() {
                         <div className="flex justify-between items-start mb-3">
                           <div>
                             <h4 className="font-bold text-slate-900 dark:text-white">{centre.name}</h4>
-                            <p className="text-xs text-slate-500 mt-0.5">Location: {centre.city}, {centre.state} • Discovered via Scrapy</p>
+                            <p className="text-xs text-slate-500 mt-0.5">Location: {formatLocation(centre.city, centre.state)} • Discovered via Scrapy</p>
                           </div>
                         </div>
                         <div className="flex gap-2">
@@ -211,7 +212,7 @@ export default async function AdminDashboard() {
                         <div className="flex justify-between items-start mb-3">
                           <div>
                             <h4 className="font-bold text-slate-900 dark:text-white">{centre.name}</h4>
-                            <p className="text-xs text-slate-500 mt-0.5">Location: {centre.city}, {centre.state}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">Location: {formatLocation(centre.city, centre.state)}</p>
                             {centre.contactNumber && (
                               <p className="text-xs text-slate-500 mt-0.5 font-mono">{centre.contactNumber}</p>
                             )}

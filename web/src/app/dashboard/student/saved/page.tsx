@@ -9,6 +9,7 @@ import { MapPin, Star, Clock, Heart, BookOpen, ChevronRight, Navigation } from "
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { User } from "@/models/User";
+import { formatLocation } from "@/lib/centre-display";
 
 export default async function SavedCentresPage() {
   const session = await getServerSession(authOptions);
@@ -74,7 +75,7 @@ export default async function SavedCentresPage() {
                         <div className="flex flex-col gap-1 mt-1">
                         <div className="flex items-center text-sm text-slate-500 dark:text-slate-400">
                             <MapPin className="w-4 h-4 mr-1 shrink-0" />
-                            {centre.city}, {centre.state}
+                            {formatLocation(centre.city, centre.state)}
                         </div>
                         </div>
                     </CardHeader>

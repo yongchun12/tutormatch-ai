@@ -114,6 +114,27 @@ export default async function OwnerDashboard() {
             </Card>
           ) : (
             <>
+              {myCentre.status === "pending" && (
+                <Card className="rounded-3xl border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900">
+                  <CardContent className="flex items-start gap-4 p-6 text-amber-700 dark:text-amber-300">
+                    <AlertTriangle className="w-6 h-6 shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="font-bold mb-1 text-amber-900 dark:text-amber-200">
+                        Your centre is not listed publicly yet
+                      </h3>
+                      <p className="text-sm">
+                        Add your centre&apos;s real address on the{" "}
+                        <Link href="/dashboard/owner/centre" className="underline font-medium">
+                          Manage Centre
+                        </Link>{" "}
+                        page and it will appear in the directory straight away. We
+                        don&apos;t publish a listing while it still holds placeholder details.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Top Metrics Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm">
@@ -200,11 +221,6 @@ export default async function OwnerDashboard() {
                       )}
                     </div>
                     
-                    <div className="mt-auto pt-4">
-                      <Button variant="outline" className="w-full rounded-xl border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300">
-                        View Full Sentiment Report
-                      </Button>
-                    </div>
                   </CardContent>
                 </Card>
 

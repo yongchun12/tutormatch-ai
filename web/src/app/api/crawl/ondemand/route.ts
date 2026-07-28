@@ -4,6 +4,7 @@ import { TuitionCentre } from "@/models/TuitionCentre";
 import { SystemLog } from "@/models/SystemLog";
 import { requireAdmin, authorizationErrorResponse } from "@/lib/authz";
 import { applyQualityGate } from "@/services/qualityGateService";
+import { formatLocation } from "@/lib/centre-display";
 
 // Subject keywords mapping for smart extraction
 const SUBJECT_KEYWORDS: Record<string, string[]> = {
@@ -177,7 +178,7 @@ export async function GET(req: NextRequest) {
            id: existing._id.toString(),
            name: existing.name,
            description: existing.description,
-           location: `${existing.city}, ${existing.state}`,
+           location: formatLocation(existing.city, existing.state),
            rating: existing.averageRating,
            reviews: existing.reviewCount,
            subjects: existing.subjects,
@@ -232,7 +233,7 @@ export async function GET(req: NextRequest) {
            id: newRecord._id.toString(),
            name: newRecord.name,
            description: newRecord.description,
-           location: `${newRecord.city}, ${newRecord.state}`,
+           location: formatLocation(newRecord.city, newRecord.state),
            rating: newRecord.averageRating,
            reviews: newRecord.reviewCount,
            subjects: newRecord.subjects,

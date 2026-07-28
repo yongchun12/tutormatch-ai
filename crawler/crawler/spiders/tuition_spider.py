@@ -1,68 +1,214 @@
-import scrapy
+import re
 from datetime import datetime, timezone
+
+import scrapy
+
+# Same subject vocabulary the TypeScript side uses
+# (web/src/services/scraperService.ts → extractSubjectsFromText), so a centre
+# found by either crawler ends up tagged the same way.
+SUBJECT_KEYWORDS = {
+    "Mathematics": ["math", "mathematics", "calculus", "algebra", "add math", "additional math"],
+    "Science": ["science", "sains"],
+    "Physics": ["physics", "fizik"],
+    "Chemistry": ["chemistry", "kimia"],
+    "Biology": ["biology", "biologi"],
+    "English": ["english", "inggeris", "muet", "ielts"],
+    "Bahasa Melayu": ["bahasa melayu", "melayu", " bm "],
+    "Sejarah": ["sejarah", "history"],
+    "Accounting": ["account", "akaun", "accounting"],
+}
+
+
+def extract_subjects(text):
+    """Keyword match over free text. Finds nothing → returns [], never guesses."""
+    if not text:
+        return []
+    lowered = f" {text.lower()} "
+    return [
+        subject
+        for subject, keywords in SUBJECT_KEYWORDS.items()
+        if any(keyword in lowered for keyword in keywords)
+    ]
+
+
+def clean(text):
+    """Collapse whitespace and strip the &nbsp; the site uses for empty fields."""
+    if not text:
+        return ""
+    return re.sub(r"\s+", " ", text.replace("\xa0", " ")).strip()
+
 
 class TuitionSpider(scrapy.Spider):
     """
-    Scrapy Spider to extract raw tuition centre data from a directory website.
-    This acts as the first stage of the Two-Stage Integration Pipeline.
-    """
-    name = "tuition_spider"
-    
-    def start_requests(self):
-        # We simulate scraping a local directory website here.
-        # In production, this would be a real URL like 'https://example.com/mock-tuition-directory'
-        urls = [
-            'https://example.com/mock-tuition-directory'
-        ]
-        for url in urls:
-            yield scrapy.Request(url=url, callback=self.parse)
+    Scrapes tuitionjob.com, a Malaysian tuition centre directory.
 
-    def parse(self, response):
-        self.logger.info("Scraping generic tuition directory website...")
-        
-        # In a real scrape, we would parse response.css(...)
-        # For demonstration of the integration, we extract mock records 
-        # as if we successfully parsed the HTML of a directory site.
-        scraped_centres = [
-            {
-                "name": "Pusat Tuisyen Kasturi",
-                "description": "Scraped from Tuition Directory Website. Kasturi offers comprehensive classes.",
-                "subjects": ["Mathematics", "Science", "Sejarah"],
-                "priceRange": "RM 200 - 400/mo",
-                "teachingMode": "physical"
-            },
-            {
-                "name": "Math Clinic Tuition Centre",
-                "description": "Scraped from Tuition Directory Website. Specialized in intensive mathematics.",
-                "subjects": ["Mathematics", "Additional Mathematics"],
-                "priceRange": "RM 150 - 300/mo",
-                "teachingMode": "hybrid"
-            },
-            {
-                "name": "Visi Smart Tuition Centre",
-                "description": "Scraped from Tuition Directory Website. Proven track record for SPM.",
-                "subjects": ["English", "Bahasa Melayu", "Science"],
-                "priceRange": "RM 180 - 350/mo",
-                "teachingMode": "physical"
+    This replaces a placeholder that requested example.com and returned three
+    hardcoded dictionaries. It now performs a real crawl:
+
+      Stage 1 (here)          the directory listing and each centre's detail page
+      Stage 2 (pipelines.py)  Google Places lookup for coordinates and ratings
+      Stage 3 (pipelines.py)  quality gate, then save to MongoDB
+
+    Politeness is configured in settings.py: ROBOTSTXT_OBEY, one request at a
+    time, a 2 second delay, AutoThrottle, and hard page/item caps. The site's
+    robots.txt allows /tuition_center_list.php and /tuition_center_view.php for
+    the generic `*` group; it blocks /admin/, /cgi-bin/, /class/, /conf/,
+    /engine/ and /template/, which this spider never touches.
+
+    Run a small trial first:
+        scrapy crawl tuition_spider -a max_pages=1 -O sample.json
+    """
+
+    name = "tuition_spider"
+    allowed_domains = ["tuitionjob.com"]
+
+    BASE = "https://www.tuitionjob.com"
+    LIST_URL = f"{BASE}/tuition_center_list.php"
+
+    def __init__(self, max_pages=None, *args, **kwargs):
+        """`-a max_pages=1` limits how many listing pages are visited."""
+        super().__init__(*args, **kwargs)
+        self.max_pages = int(max_pages) if max_pages else None
+        self.pages_seen = 0
+
+    def start_requests(self):
+        yield scrapy.Request(self.LIST_URL, callback=self.parse_list)
+
+    # ------------------------------------------------------------------
+    # Listing page
+    #
+    #   <div class="panel panel-default">
+    #     <div class="panel-body">
+    #       <p><strong>Tuition Center Name: </strong>EXCEL IN MATHS</p>
+    #       <p><strong>City: </strong>Kepong</p>
+    #       <p><strong>State: </strong>Kuala Lumpur</p>
+    #     </div>
+    #     <div class="panel-footer"><a href="tuition_center_view.php?id=105">view</a></div>
+    #   </div>
+    # ------------------------------------------------------------------
+    def parse_list(self, response):
+        self.pages_seen += 1
+        panels = response.css("div.panel.panel-default")
+        self.logger.info("Listing page %s: %s panels", self.pages_seen, len(panels))
+
+        for panel in panels:
+            link = panel.css("div.panel-footer a::attr(href)").get()
+            if not link or "tuition_center_view.php" not in link:
+                continue  # not a centre panel — the page reuses this markup
+
+            # Carry the listing's own name/city/state through, so a detail page
+            # that fails to load still yields a usable minimal record.
+            listing = {
+                "name": self._labelled_p(panel, "Tuition Center Name"),
+                "city": self._labelled_p(panel, "City"),
+                "state": self._labelled_p(panel, "State"),
             }
-        ]
-        
-        for centre_data in scraped_centres:
-            # We construct the base Scrapy item with data ONLY from the directory site
-            centre = {
-                "name": centre_data["name"],
-                "description": centre_data["description"],
-                "address": "Address not provided on website", # Will be filled by Google Maps in pipeline
-                "city": "Kuala Lumpur",
-                "state": "Kuala Lumpur",
-                "subjects": centre_data["subjects"],
-                "priceRange": centre_data["priceRange"],
-                "teachingMode": centre_data["teachingMode"],
-                "status": "approved",
-                "averageRating": 0.0, # Will be enriched by Google Maps in pipeline
-                "reviewCount": 0,
-                "logoUrl": "", # Will be enriched by Google Maps in pipeline
-                "createdAt": datetime.now(timezone.utc)
-            }
-            # Yielding this item sends it directly to pipelines.py
-            yield centre
+
+            yield response.follow(
+                link,
+                callback=self.parse_centre,
+                cb_kwargs={"listing": listing},
+            )
+
+        if self.max_pages is not None and self.pages_seen >= self.max_pages:
+            self.logger.info("Reached max_pages=%s; not paginating further.", self.max_pages)
+            return
+
+        # <ul class="pagination"> … <a href="/tuition_center_list.php?Page=2">2</a>
+        for href in response.css("ul.pagination a::attr(href)").getall():
+            if "Page=" in href:
+                yield response.follow(href, callback=self.parse_list)
+
+    @staticmethod
+    def _labelled_p(panel, label):
+        """Listing markup: <p><strong>City: </strong>Kepong</p>"""
+        for paragraph in panel.css("div.panel-body p"):
+            strong = clean(paragraph.css("strong::text").get())
+            if strong.rstrip(":").strip().lower() == label.lower():
+                full = clean(" ".join(paragraph.css("::text").getall()))
+                return clean(full.split(":", 1)[-1])
+        return ""
+
+    # ------------------------------------------------------------------
+    # Detail page
+    #
+    #   <div class="row">
+    #     <div class="col-sm-3"><p><strong>Phone</strong></p></div>
+    #     <div class="col-sm-9"><p>011-2556 9887</p></div>
+    #   </div>
+    #
+    # The label column is col-sm-3 in the contact block and col-sm-2 in the
+    # address block, so the selector walks from the <strong> up to its own
+    # column and across to the next one, rather than hardcoding a width.
+    # ------------------------------------------------------------------
+    def _field(self, response, label):
+        parts = response.xpath(
+            "//strong[normalize-space(text())=$label]"
+            "/ancestor::div[starts-with(@class,'col-sm-')][1]"
+            "/following-sibling::div[1]//p//text()",
+            label=label,
+        ).getall()
+        return clean(" ".join(parts))
+
+    def parse_centre(self, response, listing):
+        name = self._field(response, "Tuition Center Name") or listing.get("name", "")
+        if not name:
+            self.logger.warning("No name found at %s; skipping.", response.url)
+            return
+
+        about = clean(
+            " ".join(
+                response.xpath(
+                    "//strong[normalize-space(text())='About Us']"
+                    "/ancestor::div[starts-with(@class,'col-sm-')][1]"
+                    "/following-sibling::div[1]//text()"
+                ).getall()
+            )
+        )
+
+        # The page stores a fully-formed address (street + city + postcode +
+        # state) in a hidden input for its own map widget. That single string is
+        # a far better Google Places query than the pieces joined by hand.
+        map_address = clean(response.css("input#MapAddress::attr(value)").get())
+
+        street = self._field(response, "Address")
+        # The hidden input sits inside the same <p>, so its value bleeds into
+        # the visible text; remove it rather than storing the address twice.
+        if map_address and map_address in street:
+            street = clean(street.replace(map_address, ""))
+
+        city = self._field(response, "City") or listing.get("city", "")
+        state = self._field(response, "State") or listing.get("state", "")
+        postcode = self._field(response, "Postcode")
+
+        website = self._field(response, "Website")
+        if website and not website.startswith(("http://", "https://")):
+            website = f"https://{website}"  # some rows hold a bare domain
+
+        established = self._field(response, "Established Since")
+
+        item = {
+            "name": name,
+            # The centre's own words. No invented description.
+            "description": about
+            or f"Listed on tuitionjob.com{f' since {established}' if established else ''}.",
+            "address": map_address or clean(f"{street} {city} {postcode} {state}"),
+            "city": city,
+            "state": state,
+            "postcode": postcode,
+            # Keyword matches over the centre's own name and About Us text.
+            "subjects": extract_subjects(f"{name} {about}"),
+            "contactNumber": self._field(response, "Phone"),
+            "email": self._field(response, "Email"),
+            "website": website,
+            "teachingMode": "physical",
+            # Deliberately NOT set here: averageRating, reviewCount, latitude,
+            # longitude, googlePlaceId. This directory does not publish them, and
+            # the pipeline fills them from Google Places. Defaulting a rating to
+            # 4.0 (as an earlier version did) would be inventing data.
+            "sourceUrls": [response.url],
+            "createdAt": datetime.now(timezone.utc),
+        }
+
+        self.logger.info("Scraped: %s (%s, %s)", name, city, state)
+        yield item

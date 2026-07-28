@@ -10,6 +10,8 @@ load_dotenv(dotenv_path=env_path)
 
 import requests
 
+from crawler.robots import is_crawl_allowed, USER_AGENT_STRING
+
 # Every outbound call gets a timeout so a slow or hanging third-party host can
 # never stall the whole crawl.
 REQUEST_TIMEOUT = 10  # seconds
@@ -214,27 +216,49 @@ class MongoPipeline:
                     "https://maps.googleapis.com/maps/api/place/textsearch/json"
                     f"?query={query}&key={api_key}"
                 )
-                resp = requests.get(url, timeout=REQUEST_TIMEOUT).json()
 
-                if resp.get('status') == 'OK' and len(resp.get('results', [])) > 0:
-                    place = resp['results'][0]
+                # Scrapy's ROBOTSTXT_OBEY only covers requests the spider
+                # yields; this call is made by the pipeline, so it needs its own
+                # check. Cached per domain, and fails closed.
+                allowed, reason = is_crawl_allowed(url)
 
-                    # MERGE GOOGLE MAPS DATA INTO SCRAPY DATA
-                    # We inject the Google Rating and Real Address into the Scrapy item
-                    item['averageRating'] = place.get('rating', item.get('averageRating', 0.0))
-                    item['reviewCount'] = place.get('user_ratings_total', item.get('reviewCount', 0))
-                    item['address'] = place.get('formatted_address', item.get('address'))
-                    if place.get('place_id'):
-                        item['googlePlaceId'] = place['place_id']
-
-                    # We extract the live high-quality photo
-                    if 'photos' in place and len(place['photos']) > 0:
-                        photo_ref = place['photos'][0]['photo_reference']
-                        item['logoUrl'] = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference={photo_ref}&key={api_key}"
-
-                    spider.logger.info(f"Successfully combined Scrapy data with Google Maps for: {name}")
+                if not allowed:
+                    spider.logger.warning(f"Skipping Google Places lookup: {reason}")
                 else:
-                    spider.logger.warning(f"No Google Maps match found for: {name}")
+                    resp = requests.get(
+                        url,
+                        timeout=REQUEST_TIMEOUT,
+                        headers={"User-Agent": USER_AGENT_STRING},
+                    ).json()
+
+                    if resp.get('status') == 'OK' and len(resp.get('results', [])) > 0:
+                        place = resp['results'][0]
+
+                        # MERGE GOOGLE MAPS DATA INTO SCRAPY DATA
+                        # We inject the Google Rating and Real Address into the Scrapy item
+                        item['averageRating'] = place.get('rating', item.get('averageRating', 0.0))
+                        item['reviewCount'] = place.get('user_ratings_total', item.get('reviewCount', 0))
+                        item['address'] = place.get('formatted_address', item.get('address'))
+                        if place.get('place_id'):
+                            item['googlePlaceId'] = place['place_id']
+
+                        location = place.get('geometry', {}).get('location', {})
+                        if location.get('lat') is not None and location.get('lng') is not None:
+                            item['latitude'] = location['lat']
+                            item['longitude'] = location['lng']
+                            item['location'] = {
+                                "type": "Point",
+                                "coordinates": [location['lng'], location['lat']],
+                            }
+
+                        # We extract the live high-quality photo
+                        if 'photos' in place and len(place['photos']) > 0:
+                            photo_ref = place['photos'][0]['photo_reference']
+                            item['logoUrl'] = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference={photo_ref}&key={api_key}"
+
+                        spider.logger.info(f"Successfully combined Scrapy data with Google Maps for: {name}")
+                    else:
+                        spider.logger.warning(f"No Google Maps match found for: {name}")
             except Exception as e:
                 spider.logger.error(f"Google API integration failed: {e}")
 

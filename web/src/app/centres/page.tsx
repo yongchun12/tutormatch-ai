@@ -14,6 +14,7 @@ import { Review } from "@/models/Review";
 import { aiService, CandidateCentre } from "@/services/aiService";
 
 import { discoverAndSyncCentres } from "@/services/scraperService";
+import { formatLocation } from "@/lib/centre-display";
 
 // Helper to assign a random gradient based on centre ID string length or char code
 const getGradient = (id: string) => {
@@ -100,7 +101,7 @@ export default async function CentresDirectory(props: { searchParams: Promise<{ 
       id: centreIdStr,
       name: c.name,
       description: c.description,
-      location: `${c.city}, ${c.state}`,
+      location: formatLocation(c.city, c.state),
       rating: c.averageRating || 0, // Real rating (0 = not rated yet), not fabricated
       reviews: c.reviewCount || centreReviews, // Real review count from Google Maps or local
       subjects: c.subjects,

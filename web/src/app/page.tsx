@@ -6,10 +6,32 @@ import { PreferencesCTAClient } from "@/components/PreferencesCTAClient";
 import RecommendationSection from "@/components/RecommendationSection";
 import { Button } from "@/components/ui/button";
 import { Search, Sparkles, MapPin, Star } from "lucide-react";
+import dbConnect from "@/lib/db";
+import { TuitionCentre } from "@/models/TuitionCentre";
+import { Review } from "@/models/Review";
 
 export default async function Home() {
   const session = await getServerSession(authOptions);
   const isLoggedIn = !!session?.user;
+
+  // Real counts, not adjectives. These three numbers used to read "hundreds of
+  // verified tuition centres" and "hundreds of reviews", which were fixed
+  // strings that did not correspond to anything in the database.
+  let approvedCentres = 0;
+  let verifiedCentres = 0;
+  let reviewCount = 0;
+  try {
+    await dbConnect();
+    [approvedCentres, verifiedCentres, reviewCount] = await Promise.all([
+      TuitionCentre.countDocuments({ status: "approved" }),
+      TuitionCentre.countDocuments({ status: "approved", isVerified: true }),
+      Review.countDocuments({}),
+    ]);
+  } catch (error) {
+    // The homepage must still render if the database is unreachable; the copy
+    // below falls back to wording with no numbers in it.
+    console.error("Failed to load homepage counts:", error);
+  }
 
   return (
     <div className="flex flex-col min-h-[calc(100vh-4rem)]">
@@ -74,8 +96,14 @@ export default async function Home() {
               <div className="w-12 h-12 rounded-xl bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mb-6">
                 <Sparkles className="w-6 h-6" />
               </div>
-              <h3 className="font-heading text-xl font-bold mb-3 dark:text-white">Smart Recommendations</h3>
-              <p className="text-slate-600 dark:text-slate-400">Our ML algorithm matches you with centres based on your preferences, past reviews, and learning needs.</p>
+              <h3 className="font-heading text-xl font-bold mb-3 dark:text-white">Explainable Matching</h3>
+              <p className="text-slate-600 dark:text-slate-400">
+                No machine learning, by design. Every centre is scored with fixed
+                arithmetic — how many of your subjects it covers, a
+                reliability-adjusted rating, and straight-line distance from you —
+                combined with fixed weights. That means every recommendation comes
+                with a reason you can check.
+              </p>
             </div>
             
             <div className="p-8 rounded-3xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 hover:-translate-y-1 transition-transform duration-300">
@@ -83,15 +111,23 @@ export default async function Home() {
                 <Star className="w-6 h-6" />
               </div>
               <h3 className="font-heading text-xl font-bold mb-3 dark:text-white">Sentiment Analysis</h3>
-              <p className="text-slate-600 dark:text-slate-400">We analyze hundreds of reviews using AI to give you a true picture of a centre's quality, bypassing fake ratings.</p>
+              <p className="text-slate-600 dark:text-slate-400">
+                {reviewCount > 0
+                  ? `Every one of the ${reviewCount.toLocaleString()} review${reviewCount === 1 ? "" : "s"} left here is classified as positive, neutral or negative, so you see the balance of opinion rather than a single averaged star rating.`
+                  : "Reviews left here are classified as positive, neutral or negative, so you see the balance of opinion rather than a single averaged star rating."}
+              </p>
             </div>
 
             <div className="p-8 rounded-3xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 hover:-translate-y-1 transition-transform duration-300">
               <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center mb-6">
                 <MapPin className="w-6 h-6" />
               </div>
-              <h3 className="font-heading text-xl font-bold mb-3 dark:text-white">Comprehensive Directory</h3>
-              <p className="text-slate-600 dark:text-slate-400">Browse through hundreds of verified tuition centres, aggregated automatically via our web crawlers.</p>
+              <h3 className="font-heading text-xl font-bold mb-3 dark:text-white">Growing Directory</h3>
+              <p className="text-slate-600 dark:text-slate-400">
+                {approvedCentres > 0
+                  ? `${approvedCentres.toLocaleString()} tuition centre${approvedCentres === 1 ? "" : "s"} listed, gathered automatically from Google Maps and centre websites${verifiedCentres > 0 ? `, of which ${verifiedCentres.toLocaleString()} ${verifiedCentres === 1 ? "has" : "have"} had ownership verified` : ""}.`
+                  : "Tuition centres are gathered automatically from Google Maps and centre websites, then checked before they are listed."}
+              </p>
             </div>
           </div>
         </div>

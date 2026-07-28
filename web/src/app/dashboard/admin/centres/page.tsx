@@ -13,6 +13,7 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SyncButton } from "./SyncButton";
 import { ActionModal } from "@/components/ui/action-modal";
 import { BulkApproveButton } from "@/components/admin/BulkApproveButton";
+import { formatLocation } from "@/lib/centre-display";
 
 export default async function ManageCentres(props: {
     searchParams: Promise<{ page?: string }>
@@ -142,7 +143,7 @@ export default async function ManageCentres(props: {
                                             {centre.name}
                                         </td>
                                         <td className="px-6 py-4 text-slate-500 dark:text-slate-400">
-                                            {centre.city}, {centre.state}
+                                            {formatLocation(centre.city, centre.state)}
                                         </td>
                                         <td className="px-6 py-4">
                                             <Badge variant="outline" className={

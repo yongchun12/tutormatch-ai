@@ -4,6 +4,7 @@ import * as cheerio from "cheerio";
 import { GoogleGenAI } from "@google/genai";
 import { checkPublicUrl, describeRejection } from "@/lib/url-safety";
 import { needsEnrichment } from "@/lib/quality-gate";
+import { isCrawlAllowed, USER_AGENT_STRING } from "@/services/robotsService";
 
 /** Give up on a slow website rather than holding the request open forever. */
 const FETCH_TIMEOUT_MS = 10_000;
@@ -78,10 +79,19 @@ export async function syncCentreData(centreId: string) {
         throw new Error(describeRejection(check.reason, check.detail));
     }
 
+    // Ask the site's robots.txt before fetching it. Cached per domain, and it
+    // fails closed: if robots.txt cannot be read we do not crawl.
+    const robots = await isCrawlAllowed(check.url.toString());
+    if (!robots.allowed) {
+        throw new Error(`Not permitted to crawl this site: ${robots.reason}`);
+    }
+
     let html = "";
     try {
         const response = await fetch(check.url, {
-            headers: { "User-Agent": "Mozilla/5.0 (compatible; TuitionDirectoryBot/1.0)" },
+            // Identify honestly, so a site owner can see who we are and block us
+            // if they want to. The old value impersonated a Mozilla browser.
+            headers: { "User-Agent": USER_AGENT_STRING },
             // Without this a slow or deliberately stalling host keeps the request
             // open until the hosting platform kills the whole function.
             signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),

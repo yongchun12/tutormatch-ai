@@ -12,6 +12,12 @@
  * decision can be reproduced from a record without re-running a crawl.
  */
 
+// Imported (and re-exported) so the gate and the owner dashboard agree on what
+// counts as a real address, rather than each keeping its own regex.
+import { hasUsableAddress } from "@/lib/centre-display";
+
+export { hasUsableAddress };
+
 /** The criteria a record can fail, in the order they are evaluated. */
 export type GateCriterion =
   | "not-from-google-places"
@@ -177,7 +183,7 @@ export function shouldAutoPublish(centre: GateInput): GateResult {
   }
 
   // 3. A real address, not the "Address not provided" placeholder.
-  if (!hasText(centre.address) || /^address (not provided|to be updated)$/i.test(centre.address!.trim())) {
+  if (!hasUsableAddress(centre.address)) {
     failedCriteria.push("missing-address");
   }
 

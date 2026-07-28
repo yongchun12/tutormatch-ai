@@ -18,6 +18,7 @@ import SaveCentreButton from "@/components/SaveCentreButton";
 import ClaimCentreButtonWrapper from "@/components/ClaimCentreButtonWrapper";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { formatLocation } from "@/lib/centre-display";
 
 export default async function CentreDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params; // Must await params in Server Components
@@ -61,7 +62,7 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
         id: rawCentre._id.toString(),
         name: rawCentre.name,
         description: rawCentre.description,
-        location: `${rawCentre.city}, ${rawCentre.state}`,
+        location: formatLocation(rawCentre.city, rawCentre.state),
         rating: rawCentre.averageRating || 0,
         reviews: reviewsList.length > 0 ? reviewsList.length : (rawCentre.reviewCount || 0),
         // Records written straight to MongoDB by the Python crawler bypass every

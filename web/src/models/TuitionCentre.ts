@@ -4,9 +4,9 @@ export interface ITuitionCentre extends Document {
   ownerId?: mongoose.Types.ObjectId; // Optional for scraped records
   name: string;
   description: string;
-  address: string;
-  city: string;
-  state: string;
+  address?: string;
+  city?: string;
+  state?: string;
   subjects: string[];
   priceRange: string;
   teachingMode: "online" | "physical" | "hybrid";
@@ -50,9 +50,13 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
     ownerId: { type: Schema.Types.ObjectId, ref: "User" },
     name: { type: String, required: true },
     description: { type: String, required: true },
-    address: { type: String, required: true },
-    city: { type: String, required: true },
-    state: { type: String, required: true },
+    // NOT required. A centre an owner has just created has no address or
+    // location yet, and the old code filled the gap by defaulting every new
+    // listing to "Kuala Lumpur" — an invented fact. An incomplete record is
+    // allowed to exist; the quality gate is what stops it being published.
+    address: { type: String, default: "" },
+    city: { type: String, default: "" },
+    state: { type: String, default: "" },
     subjects: [{ type: String }],
     priceRange: { type: String, required: true }, // e.g. "$$" or "100-200"
     teachingMode: { type: String, enum: ["online", "physical", "hybrid"], default: "physical" },

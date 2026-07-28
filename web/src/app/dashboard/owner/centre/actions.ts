@@ -1,7 +1,7 @@
 "use server";
 
 import { requireRole } from "@/lib/authz";
-import { needsEnrichment } from "@/lib/quality-gate";
+import { needsEnrichment, hasUsableAddress } from "@/lib/quality-gate";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { revalidatePath } from "next/cache";
@@ -57,12 +57,26 @@ export async function updateCentreAction(centreId: string, formData: FormData) {
       centre.galleryUrls = galleryUrls;
     }
 
+    // A starter centre is created as "pending" with no address, so it never
+    // reaches the public directory holding placeholder text. Supplying a real
+    // address is what makes it publishable — the owner is the authority on
+    // where their own centre is. A rejected centre is not resurrected here.
+    let published = false;
+    if (centre.status === "pending" && hasUsableAddress(centre.address)) {
+      centre.status = "approved";
+      published = true;
+    }
+
     await centre.save();
-    
+
     revalidatePath("/dashboard/owner");
     revalidatePath("/dashboard/owner/centre");
-    
-    return { success: true };
+    if (published) {
+      revalidatePath("/centres");
+      revalidatePath(`/centres/${centreId}`);
+    }
+
+    return { success: true, published };
   } catch (error: any) {
     console.error("Error updating centre:", error);
     return { error: error.message || "Failed to update centre details." };

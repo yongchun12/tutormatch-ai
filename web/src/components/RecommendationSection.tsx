@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Star, MapPin, Sparkles } from "lucide-react";
+import { formatLocation } from "@/lib/centre-display";
 
 interface RecommendedCentre {
   centre_id: string;
@@ -64,7 +65,7 @@ export default async function RecommendationSection() {
         return {
           centre_id: c._id.toString(),
           name: c.name,
-          location: `${c.city}, ${c.state}`,
+          location: formatLocation(c.city, c.state),
           average_rating: c.averageRating,
           review_count: c.reviewCount || centreReviews,
           subjects: c.subjects

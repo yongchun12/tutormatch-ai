@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { discoverAndSyncCentres } from "@/services/scraperService";
+import { formatLocation } from "@/lib/centre-display";
 
 /**
  * Public location discovery for the directory page. Refreshes the database from
@@ -60,7 +61,7 @@ export async function GET(req: Request) {
         id,
         name: c.name,
         description: c.description,
-        location: `${c.city}, ${c.state}`,
+        location: formatLocation(c.city, c.state),
         rating: c.averageRating || 0,
         reviews: c.reviewCount || 0,
         subjects: c.subjects || [],

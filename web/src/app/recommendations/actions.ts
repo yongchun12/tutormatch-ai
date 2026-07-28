@@ -4,6 +4,7 @@ import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { aiService, CandidateCentre } from "@/services/aiService";
 import { GoogleGenAI } from "@google/genai";
+import { formatLocation } from "@/lib/centre-display";
 
 export type RecommendationCriteria = {
   subjects: string[];
@@ -58,7 +59,7 @@ export async function getSmartRecommendationsAction(criteria: RecommendationCrit
     const list = shortlist.map((c) => ({
       id: c._id.toString(),
       name: c.name,
-      location: `${c.city}, ${c.state}`,
+      location: formatLocation(c.city, c.state),
       subjects: c.subjects || [],
       rating: c.averageRating || 0,
       reviews: c.reviewCount || 0,
@@ -99,7 +100,7 @@ Choose the best up to 5 centres for THIS student and rank them best-first. For e
         return {
           centre_id: c._id.toString(),
           name: c.name,
-          location: `${c.city}, ${c.state}`,
+          location: formatLocation(c.city, c.state),
           average_rating: c.averageRating || 0,
           review_count: c.reviewCount || 0,
           subjects: c.subjects || [],
@@ -151,7 +152,7 @@ export async function getPublicRecommendationsAction(subjects: string[]) {
             return {
                 ...rec,
                 name: fullCentre?.name || rec.name,
-                location: fullCentre ? `${fullCentre.city}, ${fullCentre.state}` : "",
+                location: fullCentre ? formatLocation(fullCentre.city, fullCentre.state) : "",
                 average_rating: fullCentre?.averageRating || 0,
                 review_count: fullCentre?.reviewCount || 0,
                 subjects: fullCentre?.subjects || [],
