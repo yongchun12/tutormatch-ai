@@ -234,9 +234,26 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                   <MapPin className="w-4 h-4 mr-1" />
                   {centre.location}
                   <Separator orientation="vertical" className="h-4 mx-3 bg-slate-500" />
-                  <Star className="w-4 h-4 text-yellow-400 fill-yellow-400 mr-1" />
-                  <span className="font-medium text-white">{centre.rating}</span>
-                  <span className="ml-1 text-slate-300">({centre.reviews} reviews)</span>
+                  {/*
+                    A centre with no reviews has no rating. Rendering a filled
+                    yellow star next to "0" reads as a genuine zero-star score
+                    rather than an absence of data, so say "No reviews yet"
+                    instead — matching how the directory cards show "New".
+                  */}
+                  {centre.reviews > 0 ? (
+                    <>
+                      <Star className="w-4 h-4 text-yellow-400 fill-yellow-400 mr-1" />
+                      <span className="font-medium text-white">{centre.rating.toFixed(1)}</span>
+                      <span className="ml-1 text-slate-300">
+                        ({centre.reviews} review{centre.reviews === 1 ? "" : "s"})
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Star className="w-4 h-4 text-slate-300 mr-1" />
+                      <span className="text-slate-300">No reviews yet</span>
+                    </>
+                  )}
                 </div>
               </div>
 

@@ -134,6 +134,7 @@ export async function GET(request: Request) {
           priceRange: mapPriceLevel(place.price_level),
           teachingMode: "physical",
           status: "pending", // provisional — settled by the gate below
+          discoverySource: "google-places",
           averageRating: place.rating || 0,
           reviewCount: place.user_ratings_total || 0,
           logoUrl: logoUrl || undefined,
@@ -182,7 +183,7 @@ export async function GET(request: Request) {
             longitude: enriched?.longitude ?? longitude,
             subjects: enriched?.subjects ?? deducedSubjects,
             googlePlaceId: enriched?.googlePlaceId ?? place.place_id,
-            source: "google-places",
+            discoverySource: "google-places",
           },
           "cron",
           created._id

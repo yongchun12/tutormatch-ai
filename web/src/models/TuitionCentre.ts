@@ -27,6 +27,12 @@ export interface ITuitionCentre extends Document {
    * `status`: an incomplete listing is still a real centre.
    */
   needsEnrichment?: boolean;
+  /**
+   * Where this record was FIRST discovered. Set once at creation and never
+   * rewritten by enrichment — the quality gate's directory exemption depends on
+   * it still being true after Google Places has filled in a place ID.
+   */
+  discoverySource?: "google-places" | "directory" | "owner" | "admin";
   latitude?: number;
   longitude?: number;
   location?: {
@@ -71,6 +77,10 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
     googlePlaceId: { type: String },
     isVerified: { type: Boolean, default: false },
     needsEnrichment: { type: Boolean, default: false },
+    discoverySource: {
+      type: String,
+      enum: ["google-places", "directory", "owner", "admin"],
+    },
     // Geographic coordinates used for distance-based recommendation scoring.
     latitude: { type: Number },
     longitude: { type: Number },

@@ -42,6 +42,7 @@ export async function createStarterCentreAction() {
             teachingMode: "physical",
             // Not public until the owner supplies a real address.
             status: "pending",
+            discoverySource: "owner",
             needsEnrichment: true, // no subjects yet
             averageRating: 0,
             reviewCount: 0,

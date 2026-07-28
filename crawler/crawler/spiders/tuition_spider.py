@@ -197,11 +197,20 @@ class TuitionSpider(scrapy.Spider):
             "state": state,
             "postcode": postcode,
             # Keyword matches over the centre's own name and About Us text.
+            #
+            # NOTE: this page also contains a "Subject:" line, but it belongs to
+            # the "VIP Tutor" advert in the sidebar — an unrelated private tutor
+            # with their own subject list. Reading that label would attach a
+            # stranger's subjects to this centre. Do not add a selector for it.
             "subjects": extract_subjects(f"{name} {about}"),
             "contactNumber": self._field(response, "Phone"),
             "email": self._field(response, "Email"),
             "website": website,
             "teachingMode": "physical",
+            # Immutable record of where this came from. The quality gate skips
+            # its name check for directory records, and must keep doing so after
+            # stage 2 attaches a Google Place ID.
+            "discoverySource": "directory",
             # Deliberately NOT set here: averageRating, reviewCount, latitude,
             # longitude, googlePlaceId. This directory does not publish them, and
             # the pipeline fills them from Google Places. Defaulting a rating to

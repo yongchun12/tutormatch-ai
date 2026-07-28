@@ -49,7 +49,10 @@ export const CRITERION_LABELS: Record<GateCriterion, string> = {
  */
 export const TUITION_NAME_KEYWORDS = [
   "tuisyen",
+  "tusyen", // common Malaysian spelling variant, not a typo
   "tuition",
+  "tutor", // also covers "tutoring", "tutors"
+  "tutoring",
   "learning",
   "academy",
   "enrichment",
@@ -69,10 +72,16 @@ export interface GateInput {
   googlePlaceId?: string | null;
 
   /**
-   * Where the record came from. Optional: when absent, the presence of a
-   * googlePlaceId is used instead, which is the signal available today.
+   * Where this record was ORIGINALLY discovered. Immutable: it records how the
+   * centre entered the system and is never rewritten by later enrichment.
+   *
+   * This distinction matters. A record found in a curated tuition directory
+   * gains a googlePlaceId and coordinates during stage 2 enrichment, so by the
+   * time the gate runs it *looks* like a Google Places record. Keying the
+   * directory exemption on anything derived from the enriched state would make
+   * the exemption silently stop working the moment enrichment succeeded.
    */
-  source?: "google-places" | "website" | "merged" | "manual" | null;
+  discoverySource?: "google-places" | "directory" | "owner" | "admin" | null;
 
   // --- Phase 4 fields. Undefined today; the criteria below stay dormant
   // until the merge work actually populates them. ---
@@ -130,13 +139,27 @@ export function hasTuitionKeyword(name: string | null | undefined): boolean {
   return TUITION_NAME_KEYWORDS.some((keyword) => lower.includes(keyword));
 }
 
-/** True when the record is backed by a Google Places listing. */
+/**
+ * True when the record is backed by a Google Places listing.
+ *
+ * This one DOES key on the enriched state, deliberately: a directory record
+ * that has since been matched to a Place ID genuinely is confirmed by Google,
+ * and should get the credit for it.
+ */
 export function isFromGooglePlaces(centre: GateInput): boolean {
-  if (centre.source) {
-    return centre.source === "google-places" || centre.source === "merged";
-  }
-  // No explicit source recorded: a Google Place ID is the evidence we have.
-  return hasText(centre.googlePlaceId);
+  if (hasText(centre.googlePlaceId)) return true;
+  return centre.discoverySource === "google-places";
+}
+
+/**
+ * True when the record came from a curated tuition directory.
+ *
+ * Such a source has already answered "is this really a tuition centre?" — that
+ * is the entire purpose of the site it was listed on. Reads the immutable
+ * discoverySource, never the enriched state.
+ */
+export function isFromCuratedDirectory(centre: GateInput): boolean {
+  return centre.discoverySource === "directory";
 }
 
 /**
@@ -188,7 +211,16 @@ export function shouldAutoPublish(centre: GateInput): GateResult {
   }
 
   // 4. The name identifies it as a tuition/learning centre.
-  if (!hasTuitionKeyword(centre.name)) {
+  //
+  // Skipped for records from a curated tuition directory: being listed on one
+  // already establishes that the business is a tuition centre, so the name is
+  // not needed as a proxy for it. The check stays live for Google Places
+  // results, where it is what keeps malls and convention centres out.
+  //
+  // Measured on real data: 8 of 20 centres on one directory page (40%) have
+  // names with no keyword at all — "EXCEL IN MATHS", "Pasxcel", "Co Learn" —
+  // so applying it to a trusted source would hold most of a legitimate crawl.
+  if (!isFromCuratedDirectory(centre) && !hasTuitionKeyword(centre.name)) {
     failedCriteria.push("name-not-tuition-related");
   }
 

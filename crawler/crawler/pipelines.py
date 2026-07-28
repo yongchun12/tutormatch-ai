@@ -22,6 +22,7 @@ REQUEST_TIMEOUT = 10  # seconds
 # centre page (e.g. `teachingMode.charAt(0)` and `subjects.map(...)`).
 REQUIRED_DEFAULTS = {
     "name": "Unnamed Tuition Centre",
+    "discoverySource": "directory",  # this pipeline only runs for spider items
     "description": "No description available.",
     "address": "Address not provided",
     "city": "Unknown",
@@ -50,7 +51,10 @@ VALID_STATUSES = ("pending", "approved", "rejected")
 
 TUITION_NAME_KEYWORDS = (
     "tuisyen",
+    "tusyen",   # common Malaysian spelling variant, not a typo
     "tuition",
+    "tutor",    # also covers "tutoring", "tutors"
+    "tutoring",
     "learning",
     "academy",
     "enrichment",
@@ -84,8 +88,19 @@ def should_auto_publish(item):
         failed.append("missing-address")
 
     # 4. The name identifies a tuition/learning business.
+    #
+    # Skipped for records from a curated tuition directory: being listed on one
+    # already establishes that the business is a tuition centre, so the name is
+    # not needed as a proxy. The check stays live for Google Places results,
+    # where it is what keeps malls and convention centres out.
+    #
+    # Reads discoverySource — set once when the record is created and never
+    # rewritten — NOT anything derived from the enriched record. A directory
+    # entry gains a googlePlaceId during stage 2, so keying this on the enriched
+    # state would make the exemption quietly stop working.
+    from_directory = item.get("discoverySource") == "directory"
     name = str(item.get("name") or "").lower()
-    if not any(keyword in name for keyword in TUITION_NAME_KEYWORDS):
+    if not from_directory and not any(k in name for k in TUITION_NAME_KEYWORDS):
         failed.append("name-not-tuition-related")
 
     # Missing subjects is deliberately NOT a gate criterion — see the note in
@@ -129,6 +144,7 @@ def log_gate_decision(db, item, auto_publish, failed, context="python-crawler"):
             "criterion": failed[0] if failed else None,
             "failedCriteria": failed,
             "needsEnrichment": needs_enrichment(item),
+            "discoverySource": item.get("discoverySource"),
             "centreName": name,
             "createdAt": datetime.now(timezone.utc),
         })

@@ -200,7 +200,7 @@ export async function GET(req: NextRequest) {
             longitude: place.geometry?.location?.lng,
             subjects: deducedSubjects,
             googlePlaceId: place.place_id,
-            source: "google-places",
+            discoverySource: "google-places",
           },
           "ondemand-crawl"
         );
@@ -216,6 +216,7 @@ export async function GET(req: NextRequest) {
           teachingMode: "physical",
           status: gate.status,
           needsEnrichment: gate.needsEnrichment,
+          discoverySource: "google-places",
           averageRating: place.rating || 0,
           reviewCount: place.user_ratings_total || 0,
           logoUrl: logoUrl || undefined,

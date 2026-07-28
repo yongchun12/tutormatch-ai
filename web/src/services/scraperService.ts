@@ -152,7 +152,7 @@ export async function discoverAndSyncCentres(
           longitude: lng,
           subjects,
           googlePlaceId: place.place_id,
-          source: "google-places",
+          discoverySource: "google-places",
         },
         "chat-discovery"
       );
@@ -168,6 +168,7 @@ export async function discoverAndSyncCentres(
         teachingMode: "physical",
         status: gate.status,
         needsEnrichment: gate.needsEnrichment,
+        discoverySource: "google-places",
         averageRating: place.rating || 0,
         reviewCount: place.user_ratings_total || 0,
         logoUrl,
@@ -275,7 +276,7 @@ export async function scrapeLocation(locationQuery: string) {
                         longitude,
                         subjects: deducedSubjects,
                         googlePlaceId: place.place_id,
-                        source: "google-places",
+                        discoverySource: "google-places",
                     },
                     "scraper-service"
                 );
@@ -291,6 +292,7 @@ export async function scrapeLocation(locationQuery: string) {
                     teachingMode: "physical",
                     status: gate.status,
                     needsEnrichment: gate.needsEnrichment,
+                    discoverySource: "google-places",
                     averageRating: rating,
                     reviewCount: reviewCount, 
                     logoUrl: logoUrl,
