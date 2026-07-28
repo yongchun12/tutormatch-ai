@@ -137,7 +137,11 @@ export async function GET(request: Request) {
           state: parsedAddr.state,
           subjects: deducedSubjects,
           priceRange: mapPriceLevel(place.price_level),
-          teachingMode: "physical",
+          // teachingMode is deliberately NOT set. Google Places does not report
+          // whether a centre teaches online or in person, and defaulting it to
+          // "physical" stored a guess as a fact — the same defect that had
+          // MELAKA HOME TUITION, which advertises online classes, filed as
+          // physical. Left unset, it displays as "Not specified".
           status: "pending", // provisional — settled by the gate below
           discoverySource: "google-places",
           averageRating: place.rating || 0,

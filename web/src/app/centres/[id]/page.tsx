@@ -18,7 +18,7 @@ import SaveCentreButton from "@/components/SaveCentreButton";
 import ClaimCentreButtonWrapper from "@/components/ClaimCentreButtonWrapper";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { formatLocation } from "@/lib/centre-display";
+import { formatLocation, formatTeachingMode, TEACHING_MODE_UNKNOWN } from "@/lib/centre-display";
 
 export default async function CentreDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params; // Must await params in Server Components
@@ -70,9 +70,9 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
         // than crash the whole page.
         subjects: Array.isArray(rawCentre.subjects) ? rawCentre.subjects : [],
         price: rawCentre.priceRange || "Contact for pricing",
-        mode: rawCentre.teachingMode
-          ? rawCentre.teachingMode.charAt(0).toUpperCase() + rawCentre.teachingMode.slice(1)
-          : "Physical",
+        // Falling back to "Physical" here reprinted the invented default the
+        // schema no longer stores, so an unknown mode is shown as unknown.
+        mode: formatTeachingMode(rawCentre.teachingMode),
         logoUrl: rawCentre.logoUrl || null,
         latitude: rawCentre.latitude,
         longitude: rawCentre.longitude,
@@ -226,7 +226,9 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                     </Badge>
                   )}
                   <Badge className="bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-none">
-                    {centre.mode} Mode
+                    {centre.mode === TEACHING_MODE_UNKNOWN
+                      ? "Mode not specified"
+                      : `${centre.mode} Mode`}
                   </Badge>
                 </div>
                 <h1 className="text-4xl md:text-5xl font-heading font-bold text-white mb-2">{centre.name}</h1>

@@ -64,7 +64,9 @@ export async function getSmartRecommendationsAction(criteria: RecommendationCrit
       rating: c.averageRating || 0,
       reviews: c.reviewCount || 0,
       price: c.priceRange || "Not listed",
-      mode: c.teachingMode || "physical",
+      // "not specified" rather than "physical": the advisor must not be
+      // handed a guess it will then state to a student as fact.
+      mode: c.teachingMode || "not specified",
     }));
 
     const prompt = `You are TutorMatch's AI advisor for Malaysian students choosing a tuition centre.

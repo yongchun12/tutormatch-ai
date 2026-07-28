@@ -1,6 +1,28 @@
+import logging
+
 BOT_NAME = "crawler"
 SPIDER_MODULES = ["crawler.spiders"]
 NEWSPIDER_MODULE = "crawler.spiders"
+
+# --- Logging --------------------------------------------------------------
+# Scrapy runs the root logger at DEBUG, which switches on pymongo's own debug
+# logging: every command, reply, connection checkout and heartbeat, for all
+# three replica set members. That buried the lines that actually matter — the
+# rejected Google matches and the gate decisions — under thousands of lines of
+# driver chatter.
+#
+# Raised per logger rather than by lowering Scrapy's LOG_LEVEL, so the spider's
+# own DEBUG output is still available when something needs investigating.
+for _noisy in (
+    "pymongo",
+    "pymongo.command",
+    "pymongo.connection",
+    "pymongo.serverSelection",
+    "pymongo.topology",
+    "pymongo.heartbeat",
+    "urllib3.connectionpool",
+):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 # --- Politeness -----------------------------------------------------------
 # Obey robots.txt. This was False, which meant the crawler ignored every site's

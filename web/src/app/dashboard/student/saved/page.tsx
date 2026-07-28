@@ -9,7 +9,7 @@ import { MapPin, Star, Clock, Heart, BookOpen, ChevronRight, Navigation } from "
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { User } from "@/models/User";
-import { formatLocation } from "@/lib/centre-display";
+import { formatLocation, formatTeachingModeCaption } from "@/lib/centre-display";
 
 export default async function SavedCentresPage() {
   const session = await getServerSession(authOptions);
@@ -100,7 +100,7 @@ export default async function SavedCentresPage() {
                         <div className="text-lg font-bold text-slate-900 dark:text-white">{centre.priceRange || 'Contact for price'}</div>
                         <div className="text-xs text-slate-500 flex items-center mt-0.5">
                             <Clock className="w-3.5 h-3.5 mr-1" />
-                            {centre.teachingMode} Mode
+                            {formatTeachingModeCaption(centre.teachingMode)}
                         </div>
                         </div>
                         <Link href={`/centres/${centre._id.toString()}`}>

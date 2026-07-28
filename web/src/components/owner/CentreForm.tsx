@@ -122,11 +122,14 @@ export default function CentreForm({ initialData }: CentreFormProps) {
 
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Teaching Mode</label>
+          {/* Was defaulted to "physical", so an owner saving an unrelated change
+              silently committed a mode they had never chosen. */}
           <select
             name="teachingMode"
-            defaultValue={initialData.teachingMode || "physical"}
+            defaultValue={initialData.teachingMode || ""}
             className="flex h-10 w-full rounded-md border border-slate-200 bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950 dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:focus-visible:ring-slate-300"
           >
+            <option value="">Not specified</option>
             <option value="physical">Physical (In-person)</option>
             <option value="online">Online</option>
             <option value="hybrid">Hybrid</option>

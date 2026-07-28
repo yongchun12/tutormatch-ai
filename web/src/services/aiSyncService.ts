@@ -194,7 +194,15 @@ export async function syncCentreData(centreId: string) {
             // The whole point of a sync is to fill the gaps, so re-evaluate the
             // flag that says gaps remain. Otherwise a centre stays in the admin
             // "missing subjects" queue forever after being fixed.
-            centre.needsEnrichment = needsEnrichment({ subjects: centre.subjects });
+            // The whole record, not just subjects: the check also reads
+            // coordinates and the Google Place ID.
+            centre.needsEnrichment = needsEnrichment({
+                subjects: centre.subjects,
+                latitude: centre.latitude,
+                longitude: centre.longitude,
+                googlePlaceId: centre.googlePlaceId,
+                discoverySource: centre.discoverySource,
+            });
             await centre.save();
         }
 

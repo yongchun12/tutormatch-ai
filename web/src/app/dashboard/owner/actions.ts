@@ -39,7 +39,8 @@ export async function createStarterCentreAction() {
             state: "",
             subjects: [],
             priceRange: "Contact for pricing",
-            teachingMode: "physical",
+            // No teachingMode: the owner has not told us yet, and this is a
+            // blank starter listing. They choose it on the centre form.
             // Not public until the owner supplies a real address.
             status: "pending",
             discoverySource: "owner",

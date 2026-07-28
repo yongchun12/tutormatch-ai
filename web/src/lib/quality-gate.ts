@@ -100,6 +100,14 @@ export interface GateResult {
   status: "approved" | "pending";
   /** Every criterion that failed, in evaluation order. Empty when published. */
   failedCriteria: GateCriterion[];
+  /**
+   * Criteria this record failed but which were NOT counted against it, because
+   * a human reviewer could not resolve them for this source (see WAIVED_FOR_
+   * DIRECTORY). Recorded rather than discarded so the audit trail still shows
+   * what was missing, and so the results chapter can report how often the
+   * waiver was used.
+   */
+  waivedCriteria: GateCriterion[];
   /** The first failure — the headline reason a record was held. Null when published. */
   primaryReason: GateCriterion | null;
   /** Human-readable version of primaryReason, for logs and the admin queue. */
@@ -120,6 +128,31 @@ export interface GateResult {
 export const PENDING_CRITERIA: readonly GateCriterion[] = [
   "low-match-confidence",
   "unverified-ai-fields",
+];
+
+/**
+ * Criteria that are NOT applied to records from a curated tuition directory.
+ *
+ * The principle, the same one that kept "missing subjects" out of the gate:
+ * hold a record only when a human reviewer can actually resolve what is wrong
+ * with it. An admin can judge whether a business really is a tuition centre, so
+ * `name-not-tuition-related` is worth holding for. An admin cannot supply
+ * coordinates, and cannot conjure a Google Places listing for a centre that has
+ * none — so holding a directory record for either of those puts it in a queue
+ * where nothing can be done about it, and it simply never reaches students.
+ *
+ * These records are not unverified: they come from a curated directory that
+ * lists a real street address, phone number and email. What they lack is Google
+ * enrichment, which is a job for the enrichment pass, not a reviewer. They are
+ * published and flagged `needsEnrichment` instead.
+ *
+ * Both criteria stay fully active for Google Places-sourced records, where the
+ * absence of a Place ID or coordinates means the record was never confirmed by
+ * anything at all.
+ */
+export const WAIVED_FOR_DIRECTORY: readonly GateCriterion[] = [
+  "not-from-google-places",
+  "missing-coordinates",
 ];
 
 /** Trim and treat whitespace-only strings as empty. */
@@ -194,20 +227,35 @@ function evaluatePendingCriteria(centre: GateInput): GateCriterion[] {
  */
 export function shouldAutoPublish(centre: GateInput): GateResult {
   const failedCriteria: GateCriterion[] = [];
+  const waivedCriteria: GateCriterion[] = [];
+  const fromDirectory = isFromCuratedDirectory(centre);
+
+  /** Count a failure, unless this source has it waived (see WAIVED_FOR_DIRECTORY). */
+  const fail = (criterion: GateCriterion) => {
+    const waived = fromDirectory && WAIVED_FOR_DIRECTORY.includes(criterion);
+    (waived ? waivedCriteria : failedCriteria).push(criterion);
+  };
 
   // 1. Confirmed by Google Places, not a website-only scrape.
+  //    Waived for directory records — an admin cannot make Google list a centre.
   if (!isFromGooglePlaces(centre)) {
-    failedCriteria.push("not-from-google-places");
+    fail("not-from-google-places");
   }
 
   // 2. Both coordinates present, so distance ranking and the map work.
+  //    Waived for directory records — an admin cannot supply coordinates, and a
+  //    centre with a real address is still findable and contactable without a
+  //    map pin. Roughly half of one 201-centre crawl had its Google match
+  //    refused by the confidence check, so enforcing this held them all.
   if (!isValidCoordinate(centre.latitude) || !isValidCoordinate(centre.longitude)) {
-    failedCriteria.push("missing-coordinates");
+    fail("missing-coordinates");
   }
 
   // 3. A real address, not the "Address not provided" placeholder.
+  //    NOT waived for anyone: an address is the one thing a reviewer really can
+  //    chase up, and without it the listing is of no use to a student.
   if (!hasUsableAddress(centre.address)) {
-    failedCriteria.push("missing-address");
+    fail("missing-address");
   }
 
   // 4. The name identifies it as a tuition/learning centre.
@@ -220,8 +268,8 @@ export function shouldAutoPublish(centre: GateInput): GateResult {
   // Measured on real data: 8 of 20 centres on one directory page (40%) have
   // names with no keyword at all — "EXCEL IN MATHS", "Pasxcel", "Co Learn" —
   // so applying it to a trusted source would hold most of a legitimate crawl.
-  if (!isFromCuratedDirectory(centre) && !hasTuitionKeyword(centre.name)) {
-    failedCriteria.push("name-not-tuition-related");
+  if (!fromDirectory && !hasTuitionKeyword(centre.name)) {
+    fail("name-not-tuition-related");
   }
 
   // Missing subjects is deliberately NOT a gate criterion. Holding a record
@@ -236,7 +284,7 @@ export function shouldAutoPublish(centre: GateInput): GateResult {
   // 5. Phase 4 criteria — evaluated, then filtered out while still pending.
   for (const criterion of evaluatePendingCriteria(centre)) {
     if (!PENDING_CRITERIA.includes(criterion)) {
-      failedCriteria.push(criterion);
+      fail(criterion);
     }
   }
 
@@ -247,6 +295,7 @@ export function shouldAutoPublish(centre: GateInput): GateResult {
     autoPublish,
     status: autoPublish ? "approved" : "pending",
     failedCriteria,
+    waivedCriteria,
     primaryReason,
     primaryReasonLabel: primaryReason ? CRITERION_LABELS[primaryReason] : null,
   };
@@ -255,6 +304,12 @@ export function shouldAutoPublish(centre: GateInput): GateResult {
 /** One-line summary of a decision, used as the SystemLog message. */
 export function describeGateDecision(name: string, result: GateResult): string {
   if (result.autoPublish) {
+    if (result.waivedCriteria.length > 0) {
+      return (
+        `Auto-published "${name}": passed all applicable criteria ` +
+        `(${result.waivedCriteria.join(", ")} waived for a curated directory source).`
+      );
+    }
     return `Auto-published "${name}": passed all quality gate criteria.`;
   }
   return `Held "${name}" for review: ${result.primaryReasonLabel}` +
@@ -263,19 +318,53 @@ export function describeGateDecision(name: string, result: GateResult): string {
       : "");
 }
 
+/** The ways a published listing can still be incomplete. */
+export type EnrichmentReason =
+  | "no-subjects"
+  | "no-coordinates"
+  | "not-confirmed-by-google";
+
+export const ENRICHMENT_LABELS: Record<EnrichmentReason, string> = {
+  "no-subjects": "No subjects recorded",
+  "no-coordinates": "No map coordinates — will not appear in a distance search",
+  "not-confirmed-by-google": "Not matched to a Google Places listing",
+};
+
 /**
- * True when a centre is publishable but incomplete — specifically, when no
- * subjects are recorded.
+ * Everything a published record is still missing.
  *
  * Separate from the quality gate on purpose. The gate answers "is this a real
- * tuition centre we can show?"; this answers "is the listing finished?". A
- * centre can be perfectly real and still have nothing in its subjects list,
- * because Google Places almost never states them. Those records are published
- * (students can still find and contact them) but flagged so an admin can fill
- * the gap or trigger a website sync.
+ * tuition centre we can show?"; this answers "is the listing finished?". The
+ * two criteria waived above (see WAIVED_FOR_DIRECTORY) land here: the record is
+ * good enough to publish, but something automated should still come back and
+ * fill the gap. Nothing here blocks publication.
+ */
+export function enrichmentReasons(centre: GateInput): EnrichmentReason[] {
+  const reasons: EnrichmentReason[] = [];
+
+  const subjects = centre.subjects ?? [];
+  if (!Array.isArray(subjects) || subjects.filter((s) => hasText(s)).length === 0) {
+    reasons.push("no-subjects");
+  }
+
+  if (!isValidCoordinate(centre.latitude) || !isValidCoordinate(centre.longitude)) {
+    reasons.push("no-coordinates");
+  }
+
+  if (!isFromGooglePlaces(centre)) {
+    reasons.push("not-confirmed-by-google");
+  }
+
+  return reasons;
+}
+
+/**
+ * True when a centre is publishable but incomplete.
+ *
+ * Callers must pass the whole record, not just `{ subjects }` — coordinates and
+ * the Google Place ID are read too, so a partial object would report every
+ * centre as incomplete.
  */
 export function needsEnrichment(centre: GateInput): boolean {
-  const subjects = centre.subjects ?? [];
-  if (!Array.isArray(subjects)) return true;
-  return subjects.filter((s) => hasText(s)).length === 0;
+  return enrichmentReasons(centre).length > 0;
 }

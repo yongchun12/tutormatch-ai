@@ -170,7 +170,11 @@ export async function discoverAndSyncCentres(
         state,
         subjects,
         priceRange: mapPriceLevel(place.price_level),
-        teachingMode: "physical",
+        // teachingMode is deliberately NOT set. Google Places does not report
+        // whether a centre teaches online or in person, and defaulting it to
+        // "physical" stored a guess as a fact — the same defect that had
+        // MELAKA HOME TUITION, which advertises online classes, filed as
+        // physical. Left unset, it displays as "Not specified".
         status: gate.status,
         needsEnrichment: gate.needsEnrichment,
         discoverySource: "google-places",
@@ -296,7 +300,11 @@ export async function scrapeLocation(locationQuery: string) {
                     state: state,
                     subjects: deducedSubjects,
                     priceRange: mapPriceLevel(place.price_level),
-                    teachingMode: "physical",
+                    // teachingMode is deliberately NOT set. Google Places does not report
+                    // whether a centre teaches online or in person, and defaulting it to
+                    // "physical" stored a guess as a fact — the same defect that had
+                    // MELAKA HOME TUITION, which advertises online classes, filed as
+                    // physical. Left unset, it displays as "Not specified".
                     status: gate.status,
                     needsEnrichment: gate.needsEnrichment,
                     discoverySource: "google-places",

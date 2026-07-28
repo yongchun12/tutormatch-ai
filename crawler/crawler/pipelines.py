@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime, timezone
 
 import pymongo
@@ -43,6 +44,14 @@ REQUIRED_DEFAULTS = {
 VALID_TEACHING_MODES = ("online", "physical", "hybrid")
 VALID_STATUSES = ("pending", "approved", "rejected")
 
+# Fields that can only ever have come from a Google Places match. When a match
+# is refused these are removed outright rather than zeroed, so the centre page
+# shows "No reviews yet" rather than a real-looking 0.0 rating.
+GOOGLE_ONLY_FIELDS = (
+    "averageRating", "reviewCount", "googlePlaceId",
+    "latitude", "longitude", "location", "logoUrl",
+)
+
 # ---------------------------------------------------------------------------
 # Quality gate — the Python mirror of web/src/lib/quality-gate.ts.
 #
@@ -67,70 +76,134 @@ TUITION_NAME_KEYWORDS = (
 PLACEHOLDER_ADDRESSES = ("address not provided", "address to be updated")
 
 
+def has_usable_address(address):
+    """
+    Mirror of hasUsableAddress() in web/src/lib/centre-display.ts.
+
+    Requires letters AND at least one digit — a street number, unit number or
+    postcode. See the note there: with coordinates no longer held against
+    directory records, this is the only criterion left between the source data
+    and the public directory, and the source contains spam submissions whose
+    addresses are random letters with no number in them.
+    """
+    text = str(address or "").strip()
+    if len(text) < 5:
+        return False
+    if text.lower().startswith(PLACEHOLDER_ADDRESSES):
+        return False
+    return bool(re.search(r"[A-Za-z]", text)) and bool(re.search(r"\d", text))
+
+# Criteria NOT applied to records from a curated tuition directory. Mirrors
+# WAIVED_FOR_DIRECTORY in web/src/lib/quality-gate.ts — see the long note there.
+#
+# In short: hold a record only when a human reviewer can resolve what is wrong
+# with it. An admin can judge whether a business is really a tuition centre, but
+# cannot supply coordinates and cannot make Google list a centre that has no
+# Places entry. Holding directory records for either puts them in a queue where
+# nothing can be done, so they publish and are flagged for enrichment instead.
+WAIVED_FOR_DIRECTORY = ("not-from-google-places", "missing-coordinates")
+
+
+def is_from_google_places(item):
+    """
+    True when the record is backed by a Google Places listing.
+
+    Mirrors isFromGooglePlaces() in quality-gate.ts, including the second half:
+    a record discovered THROUGH a Places search counts as confirmed by Places
+    even if the place_id was not kept. Checking only the ID made this crawler
+    hold records the web app published from identical data.
+    """
+    if str(item.get("googlePlaceId") or "").strip():
+        return True
+    return item.get("discoverySource") == "google-places"
+
+
 def should_auto_publish(item):
     """
-    Return (auto_publish: bool, failed_criteria: list[str]).
+    Return (auto_publish: bool, failed: list[str], waived: list[str]).
 
     Criterion names match the GateCriterion union in quality-gate.ts so the
     GateDecision counts line up across both crawlers.
     """
-    failed = []
+    failed, waived = [], []
+
+    # Reads discoverySource — set once when the record is created and never
+    # rewritten — NOT anything derived from the enriched record. A directory
+    # entry gains a googlePlaceId during stage 2, so keying the waiver on the
+    # enriched state would make it quietly stop working.
+    from_directory = item.get("discoverySource") == "directory"
+
+    def fail(criterion):
+        if from_directory and criterion in WAIVED_FOR_DIRECTORY:
+            waived.append(criterion)
+        else:
+            failed.append(criterion)
 
     # 1. Confirmed by a Google Places listing, not a website-only scrape.
-    if not str(item.get("googlePlaceId") or "").strip():
-        failed.append("not-from-google-places")
+    if not is_from_google_places(item):
+        fail("not-from-google-places")
 
     # 2. Both coordinates present.
     lat, lng = item.get("latitude"), item.get("longitude")
     if not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)):
-        failed.append("missing-coordinates")
+        fail("missing-coordinates")
 
-    # 3. A real address, not the placeholder.
-    address = str(item.get("address") or "").strip()
-    if not address or address.lower() in PLACEHOLDER_ADDRESSES:
-        failed.append("missing-address")
+    # 3. A real address, not a placeholder or a string of random characters.
+    #    Waived for nobody: this is the one thing a reviewer can chase up, and
+    #    without it the listing is useless to a student.
+    if not has_usable_address(item.get("address")):
+        fail("missing-address")
 
     # 4. The name identifies a tuition/learning business.
     #
-    # Skipped for records from a curated tuition directory: being listed on one
-    # already establishes that the business is a tuition centre, so the name is
-    # not needed as a proxy. The check stays live for Google Places results,
-    # where it is what keeps malls and convention centres out.
-    #
-    # Reads discoverySource — set once when the record is created and never
-    # rewritten — NOT anything derived from the enriched record. A directory
-    # entry gains a googlePlaceId during stage 2, so keying this on the enriched
-    # state would make the exemption quietly stop working.
-    from_directory = item.get("discoverySource") == "directory"
+    # Skipped entirely for directory records: being listed on a curated tuition
+    # directory already establishes that the business is a tuition centre, so
+    # the name is not needed as a proxy. The check stays live for Google Places
+    # results, where it is what keeps malls and convention centres out.
     name = str(item.get("name") or "").lower()
     if not from_directory and not any(k in name for k in TUITION_NAME_KEYWORDS):
-        failed.append("name-not-tuition-related")
+        fail("name-not-tuition-related")
 
     # Missing subjects is deliberately NOT a gate criterion — see the note in
     # web/src/lib/quality-gate.ts. An admin can judge whether something is a real
     # tuition centre but cannot know what it teaches, so holding the record helps
-    # nobody. It is tracked by needs_enrichment() below instead.
+    # nobody. It is tracked by enrichment_reasons() below instead.
 
     # TODO(Phase 4): add "low-match-confidence" (matchConfidence < 0.90) and
     # "unverified-ai-fields" once the merge step writes matchConfidence and
     # fieldProvenance. Do not add them before those fields exist or every
     # record will be held.
 
-    return (len(failed) == 0, failed)
+    return (len(failed) == 0, failed, waived)
+
+
+def enrichment_reasons(item):
+    """
+    Everything a published listing is still missing. Mirrors enrichmentReasons()
+    in quality-gate.ts. Nothing here blocks publication.
+    """
+    reasons = []
+
+    subjects = item.get("subjects") or []
+    if not isinstance(subjects, list) or not [s for s in subjects if str(s).strip()]:
+        reasons.append("no-subjects")
+
+    lat, lng = item.get("latitude"), item.get("longitude")
+    if not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)):
+        reasons.append("no-coordinates")
+
+    if not is_from_google_places(item):
+        reasons.append("not-confirmed-by-google")
+
+    return reasons
 
 
 def needs_enrichment(item):
-    """
-    True when the listing is publishable but incomplete — currently, when no
-    subjects are recorded. Mirrors needsEnrichment() in quality-gate.ts.
-    """
-    subjects = item.get("subjects") or []
-    if not isinstance(subjects, list):
-        return True
-    return not [s for s in subjects if str(s).strip()]
+    """True when the listing is publishable but still incomplete."""
+    return len(enrichment_reasons(item)) > 0
 
 
-def log_gate_decision(db, item, auto_publish, failed, context="python-crawler"):
+def log_gate_decision(db, item, auto_publish, failed, waived, context="python-crawler"):
     """
     Record the decision in the same GateDecision collection the web app uses,
     with the same field names, so the results chapter can count both crawlers
@@ -146,7 +219,9 @@ def log_gate_decision(db, item, auto_publish, failed, context="python-crawler"):
             "context": context,
             "criterion": failed[0] if failed else None,
             "failedCriteria": failed,
+            "waivedCriteria": waived,
             "needsEnrichment": needs_enrichment(item),
+            "enrichmentReasons": enrichment_reasons(item),
             "discoverySource": item.get("discoverySource"),
             "centreName": name,
             "createdAt": datetime.now(timezone.utc),
@@ -313,18 +388,38 @@ class MongoPipeline:
             # the status of a centre an admin (or owner) has already dealt with.
             doc.pop('createdAt', None)
             doc.pop('status', None)
-            self.db['tuitioncentres'].update_one({"_id": existing["_id"]}, {"$set": doc})
+
+            update = {"$set": doc}
+
+            # A refused match has to REMOVE the Google fields, not just decline
+            # to write new ones. $set alone would leave a rating and place ID
+            # from an earlier, unchecked run sitting on the record — which is
+            # exactly the borrowed reputation the match check exists to stop.
+            if doc.get('googleMatchRejected') and any(
+                existing.get(field) is not None for field in GOOGLE_ONLY_FIELDS
+            ):
+                # A field cannot be in both operators, and apply_required_defaults
+                # has already put averageRating: 0.0 / reviewCount: 0 into $set.
+                for field in GOOGLE_ONLY_FIELDS:
+                    doc.pop(field, None)
+                update["$unset"] = {field: "" for field in GOOGLE_ONLY_FIELDS}
+                spider.logger.warning(
+                    f"Removed stale Google data from {name}: match now refused."
+                )
+
+            self.db['tuitioncentres'].update_one({"_id": existing["_id"]}, update)
             spider.logger.info(f"Updated existing centre in DB: {name}")
         else:
-            auto_publish, failed = should_auto_publish(doc)
+            auto_publish, failed, waived = should_auto_publish(doc)
             doc['status'] = "approved" if auto_publish else "pending"
             doc['needsEnrichment'] = needs_enrichment(doc)
 
             self.db['tuitioncentres'].insert_one(doc)
-            log_gate_decision(self.db, doc, auto_publish, failed, context="Scrapy crawl")
+            log_gate_decision(self.db, doc, auto_publish, failed, waived, context="Scrapy crawl")
 
             if auto_publish:
-                spider.logger.info(f"Inserted and auto-published: {name}")
+                waived_note = f" (waived: {', '.join(waived)})" if waived else ""
+                spider.logger.info(f"Inserted and auto-published{waived_note}: {name}")
             else:
                 spider.logger.info(
                     f"Inserted and held for review ({failed[0]}): {name}"

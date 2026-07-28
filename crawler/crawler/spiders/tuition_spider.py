@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import scrapy
 
-from crawler.text_clean import fix_mojibake, detect_teaching_mode
+from crawler.text_clean import decode_entities, fix_mojibake, detect_teaching_mode
 
 # Same subject vocabulary the TypeScript side uses
 # (web/src/services/scraperService.ts → extractSubjectsFromText), so a centre
@@ -35,12 +35,21 @@ def extract_subjects(text):
 
 def clean(text):
     """
-    Collapse whitespace, strip the &nbsp; the site uses for empty fields, and
-    repair the double-encoded characters the source stores ("â€™" -> "’").
+    Normalise one scraped string.
+
+    Three separate defects in the source, applied in the order they were
+    introduced by it:
+      - HTML entities escaped twice, so one decode is left over
+        ("&#26126;" -> "明");
+      - UTF-8 text decoded as Windows-1252 before it was stored
+        ("â€™" -> "’");
+      - &nbsp; used to fill empty fields, and irregular whitespace.
     """
     if not text:
         return ""
-    return fix_mojibake(re.sub(r"\s+", " ", text.replace("\xa0", " ")).strip())
+    text = decode_entities(text)
+    text = fix_mojibake(text)
+    return re.sub(r"\s+", " ", text.replace("\xa0", " ")).strip()
 
 
 class TuitionSpider(scrapy.Spider):
@@ -125,6 +134,26 @@ class TuitionSpider(scrapy.Spider):
                 yield response.follow(href, callback=self.parse_list)
 
     @staticmethod
+    def _unswap_city_postcode(city, postcode):
+        """
+        Put the two back the right way round when the source has them reversed.
+
+        This is a mistake in the directory's own data, not in our parsing: the
+        listing for Quantum Academy (id=207) really does say City "41200" and
+        Postcode "Klang", and the site displays it that way too. Without this,
+        the centre is filed under a city called "41200" and its Google Places
+        query searches for a number.
+
+        Keyed on the shape of the values rather than on the centre's name, so
+        any other record entered the same way is corrected as well.
+        """
+        city_is_postcode = bool(re.fullmatch(r"\d{5}", city.strip()))
+        postcode_is_postcode = bool(re.fullmatch(r"\d{5}", postcode.strip()))
+        if city_is_postcode and not postcode_is_postcode:
+            return postcode.strip(), city.strip()
+        return city, postcode
+
+    @staticmethod
     def _labelled_p(panel, label):
         """Listing markup: <p><strong>City: </strong>Kepong</p>"""
         for paragraph in panel.css("div.panel-body p"):
@@ -185,6 +214,7 @@ class TuitionSpider(scrapy.Spider):
         city = self._field(response, "City") or listing.get("city", "")
         state = self._field(response, "State") or listing.get("state", "")
         postcode = self._field(response, "Postcode")
+        city, postcode = self._unswap_city_postcode(city, postcode)
 
         website = self._field(response, "Website")
         if website and not website.startswith(("http://", "https://")):

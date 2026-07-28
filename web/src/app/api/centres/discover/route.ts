@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { discoverAndSyncCentres } from "@/services/scraperService";
-import { formatLocation } from "@/lib/centre-display";
+import { formatLocation, formatTeachingMode } from "@/lib/centre-display";
 
 /**
  * Public location discovery for the directory page. Refreshes the database from
@@ -66,9 +66,7 @@ export async function GET(req: Request) {
         reviews: c.reviewCount || 0,
         subjects: c.subjects || [],
         price: c.priceRange,
-        mode: c.teachingMode
-          ? c.teachingMode.charAt(0).toUpperCase() + c.teachingMode.slice(1)
-          : "Physical",
+        mode: formatTeachingMode(c.teachingMode),
         isVerified: c.isVerified || false,
         aiMatch: null,
         image: c.logoUrl || null,

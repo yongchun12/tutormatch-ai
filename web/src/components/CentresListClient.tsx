@@ -8,6 +8,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { MapPin, Star, Clock, Search, Sparkles, Navigation, Map, X, ShieldCheck } from "lucide-react";
+import { TEACHING_MODE_UNKNOWN } from "@/lib/centre-display";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Loader2 } from "lucide-react";
 import CompareModal from "./CompareModal";
@@ -701,7 +702,9 @@ export default function CentresListClient({ initialCentres, savedCentreIds = [] 
                       <div className="text-lg font-bold text-slate-900 dark:text-white">{centre.price}</div>
                       <div className="text-xs text-slate-500 flex items-center mt-0.5">
                         <Clock className="w-3.5 h-3.5 mr-1" />
-                        {centre.mode} Mode
+                        {centre.mode === TEACHING_MODE_UNKNOWN
+                          ? "Mode not specified"
+                          : `${centre.mode} Mode`}
                       </div>
                     </div>
                     <div className="flex gap-2">

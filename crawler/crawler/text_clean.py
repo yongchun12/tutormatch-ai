@@ -4,7 +4,49 @@ Text repair and inference for scraped centre records.
 Pure functions — no network, no database.
 """
 
+import html
 import re
+
+# ---------------------------------------------------------------------------
+# HTML entities
+#
+# tuitionjob.com escapes its own markup twice, so a Chinese centre name is
+# stored as "&amp;#26126;&amp;#28783;..." in the page source. The HTML parser
+# decodes one level, which leaves the literal text "&#26126;&#28783;..." in the
+# scraped value — the raw entities the user sees on the centre page.
+#
+# One further decode gives the real name back:
+#   GENIUS E Learning Centre (&#26126;&#28783;&#34917;&#20064;&#65289;
+#   -> GENIUS E Learning Centre (明灯补习）
+# ---------------------------------------------------------------------------
+
+# A well-formed entity: numeric (&#38;, &#x26;) or a named one. Requiring the
+# trailing semicolon keeps a bare ampersand in a real name ("marc&zed") intact,
+# since html.unescape() would otherwise be free to reinterpret it.
+_ENTITY = re.compile(r"&(#\d+|#[xX][0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]{1,31});")
+
+
+def decode_entities(text, max_passes=2):
+    """
+    Decode HTML entities the parser left behind, and only those.
+
+    Capped at two passes: the source double-escapes, and anything needing more
+    is likelier to be text that genuinely contains an ampersand than data still
+    waiting to be decoded.
+    """
+    if not text or not isinstance(text, str):
+        return text
+
+    for _ in range(max_passes):
+        if not _ENTITY.search(text):
+            break
+        decoded = html.unescape(text)
+        if decoded == text:
+            break
+        text = decoded
+
+    return text
+
 
 # ---------------------------------------------------------------------------
 # Mojibake repair

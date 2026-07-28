@@ -49,10 +49,22 @@ export async function updateCentreAction(centreId: string, formData: FormData) {
     if (priceRange) centre.priceRange = priceRange;
     if (["online", "physical", "hybrid"].includes(teachingMode)) {
       centre.teachingMode = teachingMode as "online" | "physical" | "hybrid";
+    } else if (teachingMode === "") {
+      // The owner picked "Not specified". Clear it rather than leaving an old
+      // value in place, so the form can actually take a mode back off a listing.
+      centre.teachingMode = undefined;
     }
     centre.subjects = subjects;
-    // Clears (or re-raises) the admin "missing subjects" flag.
-    centre.needsEnrichment = needsEnrichment({ subjects });
+    // Clears (or re-raises) the admin "still incomplete" flag. Pass the whole
+    // record: the check reads coordinates and the Google Place ID as well as
+    // subjects, so a `{ subjects }`-only object would always report incomplete.
+    centre.needsEnrichment = needsEnrichment({
+      subjects,
+      latitude: centre.latitude,
+      longitude: centre.longitude,
+      googlePlaceId: centre.googlePlaceId,
+      discoverySource: centre.discoverySource,
+    });
     if (galleryUrls.length > 0 || centre.galleryUrls) {
       centre.galleryUrls = galleryUrls;
     }

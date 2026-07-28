@@ -14,7 +14,7 @@ import { Review } from "@/models/Review";
 import { aiService, CandidateCentre } from "@/services/aiService";
 
 import { discoverAndSyncCentres } from "@/services/scraperService";
-import { formatLocation } from "@/lib/centre-display";
+import { formatLocation, formatTeachingMode } from "@/lib/centre-display";
 
 // Helper to assign a random gradient based on centre ID string length or char code
 const getGradient = (id: string) => {
@@ -104,9 +104,13 @@ export default async function CentresDirectory(props: { searchParams: Promise<{ 
       location: formatLocation(c.city, c.state),
       rating: c.averageRating || 0, // Real rating (0 = not rated yet), not fabricated
       reviews: c.reviewCount || centreReviews, // Real review count from Google Maps or local
-      subjects: c.subjects,
+      // Guarded for the same reason as mode: the client maps over this, and a
+      // record written straight to MongoDB bypasses the schema default.
+      subjects: Array.isArray(c.subjects) ? c.subjects : [],
       price: c.priceRange,
-      mode: c.teachingMode.charAt(0).toUpperCase() + c.teachingMode.slice(1),
+      // May be absent — the crawler only sets it when the centre's own text
+      // says so. Reading .charAt(0) off it crashed the whole directory page.
+      mode: formatTeachingMode(c.teachingMode),
       isVerified: c.isVerified || false,
       aiMatch: aiRec ? Math.round(aiRec.match_score * 100) : null, // Real AI Match (0-100) or null
       image: c.logoUrl || null,

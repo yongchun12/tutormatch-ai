@@ -2,11 +2,12 @@ import type mongoose from "mongoose";
 import { GateDecision } from "@/models/GateDecision";
 import {
   shouldAutoPublish,
-  needsEnrichment as computeNeedsEnrichment,
+  enrichmentReasons as computeEnrichmentReasons,
   describeGateDecision,
   type GateInput,
   type GateResult,
   type GateCriterion,
+  type EnrichmentReason,
   CRITERION_LABELS,
   PENDING_CRITERIA,
 } from "@/lib/quality-gate";
@@ -35,8 +36,10 @@ const CONTEXT_LABELS: Record<GateContext, string> = {
 };
 
 export interface GateOutcome extends GateResult {
-  /** Published but incomplete — no subjects recorded. See lib/quality-gate.ts. */
+  /** Published but incomplete. See lib/quality-gate.ts. */
   needsEnrichment: boolean;
+  /** Exactly what is still missing. */
+  enrichmentReasons: EnrichmentReason[];
   /** One-line summary, suitable for a log line or the admin queue. */
   summary: string;
 }
@@ -54,7 +57,7 @@ export async function applyQualityGate(
   centreId?: mongoose.Types.ObjectId
 ): Promise<GateOutcome> {
   const result = shouldAutoPublish(centre);
-  const enrichment = computeNeedsEnrichment(centre);
+  const reasons = computeEnrichmentReasons(centre);
   const name = centre.name?.trim() || "Unnamed centre";
   const summary = describeGateDecision(name, result);
 
@@ -64,7 +67,9 @@ export async function applyQualityGate(
       context,
       criterion: result.primaryReason ?? undefined,
       failedCriteria: result.failedCriteria,
-      needsEnrichment: enrichment,
+      waivedCriteria: result.waivedCriteria,
+      needsEnrichment: reasons.length > 0,
+      enrichmentReasons: reasons,
       centreId: centreId ?? undefined,
       centreName: name,
     });
@@ -74,7 +79,8 @@ export async function applyQualityGate(
 
   return {
     ...result,
-    needsEnrichment: enrichment,
+    needsEnrichment: reasons.length > 0,
+    enrichmentReasons: reasons,
     summary: `${CONTEXT_LABELS[context]} — ${summary}`,
   };
 }
@@ -92,6 +98,16 @@ export interface GateStats {
     count: number;
   }>;
   byContext: Array<{ context: string; published: number; held: number }>;
+  /**
+   * How often each criterion was waived rather than held against a record
+   * (see WAIVED_FOR_DIRECTORY). Reported alongside the failures so the gate's
+   * leniency is visible, not hidden.
+   */
+  byWaivedCriterion: Array<{
+    criterion: GateCriterion | string;
+    label: string;
+    count: number;
+  }>;
   /** Criteria defined but not yet switched on (see PENDING_CRITERIA). */
   notYetActive: string[];
 }
@@ -102,8 +118,15 @@ export interface GateStats {
  * nothing has been silently discarded.
  */
 export async function getQualityGateStats(): Promise<GateStats> {
-  const [total, published, held, needingEnrichment, byCriterion, byContext] =
-    await Promise.all([
+  const [
+    total,
+    published,
+    held,
+    needingEnrichment,
+    byCriterion,
+    byWaivedCriterion,
+    byContext,
+  ] = await Promise.all([
       GateDecision.countDocuments({}),
       GateDecision.countDocuments({ decision: "published" }),
       GateDecision.countDocuments({ decision: "held" }),
@@ -112,6 +135,11 @@ export async function getQualityGateStats(): Promise<GateStats> {
         { $match: { decision: "held" } },
         { $unwind: "$failedCriteria" },
         { $group: { _id: "$failedCriteria", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]),
+      GateDecision.aggregate<{ _id: string; count: number }>([
+        { $unwind: "$waivedCriteria" },
+        { $group: { _id: "$waivedCriteria", count: { $sum: 1 } } },
         { $sort: { count: -1 } },
       ]),
       GateDecision.aggregate<{ _id: string; published: number; held: number }>([
@@ -143,6 +171,11 @@ export async function getQualityGateStats(): Promise<GateStats> {
       context: row._id,
       published: row.published,
       held: row.held,
+    })),
+    byWaivedCriterion: byWaivedCriterion.map((row) => ({
+      criterion: row._id,
+      label: CRITERION_LABELS[row._id as GateCriterion] ?? row._id,
+      count: row.count,
     })),
     notYetActive: [...PENDING_CRITERIA],
   };
