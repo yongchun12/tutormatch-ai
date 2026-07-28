@@ -1,6 +1,7 @@
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { applyQualityGate } from "@/services/qualityGateService";
+import { parseMalaysianAddress } from "@/lib/address";
 
 // ---------------------------------------------------------------------------
 // Lightweight, chat-facing live discovery.
@@ -114,8 +115,12 @@ export async function discoverAndSyncCentres(
     if (!isSchool && !hasKeywords) continue;
 
     const address: string = place.formatted_address || "";
-    const state = parseState(address, location);
-    const city = state;
+    // Was `const state = parseState(...); const city = state;` — which stored
+    // the state in the city field, so searching "Penang" gave every centre the
+    // city "Penang". Parse both properly from the formatted address.
+    const parsed = parseMalaysianAddress(address);
+    const state = parsed.state || parseState(address, location);
+    const city = parsed.city;
     const subjects = extractSubjectsFromText(name);
     const lat = place.geometry?.location?.lat;
     const lng = place.geometry?.location?.lng;
@@ -236,8 +241,10 @@ export async function scrapeLocation(locationQuery: string) {
 
             // Parse the state from the address, defaulting to the searched location
             // (not a hard-coded "Kuala Lumpur").
-            const state = parseState(address, locationQuery !== "Malaysia" ? locationQuery : "Kuala Lumpur");
-            const city = state;
+            const parsedAddr = parseMalaysianAddress(address);
+            const state = parsedAddr.state
+                || parseState(address, locationQuery !== "Malaysia" ? locationQuery : "");
+            const city = parsedAddr.city;
 
             // Deduce subjects from the place name instead of assuming a fixed set.
             const deducedSubjects = extractSubjectsFromText(name);

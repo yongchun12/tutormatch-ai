@@ -4,6 +4,7 @@ import { TuitionCentre } from "@/models/TuitionCentre";
 import { SystemLog } from "@/models/SystemLog";
 import { requireAdmin, authorizationErrorResponse } from "@/lib/authz";
 import { applyQualityGate } from "@/services/qualityGateService";
+import { parseMalaysianAddress } from "@/lib/address";
 import { formatLocation } from "@/lib/centre-display";
 
 // Subject keywords mapping for smart extraction
@@ -128,10 +129,10 @@ export async function GET(req: NextRequest) {
       const combinedText = `${name} ${place.reviewsText}`;
       const deducedSubjects = extractSubjectsFromName(combinedText);
       
-      // Parse city/state from formatted address roughly
-      const addrParts = (place.formatted_address || "").split(",");
-      const state = addrParts.length >= 2 ? addrParts[addrParts.length - 1].trim().replace(/\d+/g, '').trim() : "Unknown"; // strip postcodes
-      const city = addrParts.length >= 3 ? addrParts[addrParts.length - 2].trim() : "Unknown";
+      // This used to take the LAST comma-separated part as the state, which is
+      // the country ("Malaysia"), and the second-to-last as the city, which is
+      // actually the state. Shared parser now.
+      const { city, state } = parseMalaysianAddress(place.formatted_address);
 
       let logoUrl = null;
       if (place.photos && place.photos.length > 0) {

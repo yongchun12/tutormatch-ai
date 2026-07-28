@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 
 import scrapy
 
+from crawler.text_clean import fix_mojibake, detect_teaching_mode
+
 # Same subject vocabulary the TypeScript side uses
 # (web/src/services/scraperService.ts → extractSubjectsFromText), so a centre
 # found by either crawler ends up tagged the same way.
@@ -32,10 +34,13 @@ def extract_subjects(text):
 
 
 def clean(text):
-    """Collapse whitespace and strip the &nbsp; the site uses for empty fields."""
+    """
+    Collapse whitespace, strip the &nbsp; the site uses for empty fields, and
+    repair the double-encoded characters the source stores ("â€™" -> "’").
+    """
     if not text:
         return ""
-    return re.sub(r"\s+", " ", text.replace("\xa0", " ")).strip()
+    return fix_mojibake(re.sub(r"\s+", " ", text.replace("\xa0", " ")).strip())
 
 
 class TuitionSpider(scrapy.Spider):
@@ -187,6 +192,8 @@ class TuitionSpider(scrapy.Spider):
 
         established = self._field(response, "Established Since")
 
+        teaching_mode = detect_teaching_mode(name, about)
+
         item = {
             "name": name,
             # The centre's own words. No invented description.
@@ -206,7 +213,10 @@ class TuitionSpider(scrapy.Spider):
             "contactNumber": self._field(response, "Phone"),
             "email": self._field(response, "Email"),
             "website": website,
-            "teachingMode": "physical",
+            # Inferred from the centre's own description; omitted entirely when
+            # the text does not say. Hard-coding "physical" made MELAKA HOME
+            # TUITION, which advertises online classes, claim the opposite.
+            **({"teachingMode": teaching_mode} if teaching_mode else {}),
             # Immutable record of where this came from. The quality gate skips
             # its name check for directory records, and must keep doing so after
             # stage 2 attaches a Google Place ID.

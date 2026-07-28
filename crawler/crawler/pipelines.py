@@ -11,6 +11,7 @@ load_dotenv(dotenv_path=env_path)
 import requests
 
 from crawler.robots import is_crawl_allowed, USER_AGENT_STRING
+from crawler.matching import best_place_match
 
 # Every outbound call gets a timeout so a slow or hanging third-party host can
 # never stall the whole crawl.
@@ -29,7 +30,9 @@ REQUIRED_DEFAULTS = {
     "state": "Unknown",
     "subjects": [],
     "priceRange": "Contact for pricing",
-    "teachingMode": "physical",
+    # teachingMode is deliberately NOT defaulted. An unknown mode is left unset
+    # and shown as "Not specified"; claiming "physical" would be a guess stored
+    # as a fact. See crawler/text_clean.py:detect_teaching_mode.
     "status": "pending",
     "averageRating": 0.0,
     "reviewCount": 0,
@@ -165,8 +168,9 @@ def apply_required_defaults(item):
             doc[field] = default() if callable(default) else default
 
     # Enum fields: Mongoose would reject a bad value, pymongo would not.
-    if doc.get("teachingMode") not in VALID_TEACHING_MODES:
-        doc["teachingMode"] = "physical"
+    # An absent teachingMode is legitimate; only a *wrong* value is corrected.
+    if doc.get("teachingMode") is not None and doc.get("teachingMode") not in VALID_TEACHING_MODES:
+        doc.pop("teachingMode")
     if doc.get("status") not in VALID_STATUSES:
         doc["status"] = "pending"
 
@@ -248,13 +252,34 @@ class MongoPipeline:
                     ).json()
 
                     if resp.get('status') == 'OK' and len(resp.get('results', [])) > 0:
-                        place = resp['results'][0]
+                        # Do NOT blindly take results[0]. Google always returns
+                        # its best guess, so a centre with no Maps listing would
+                        # silently inherit a neighbouring business's rating and
+                        # review count. Only accept a result whose name really
+                        # matches, or whose location corroborates a partial name
+                        # match. See crawler/matching.py.
+                        place, match_reason, similarity = best_place_match(
+                            item, resp.get('results', [])
+                        )
 
+                        if place is None:
+                            item['googleMatchRejected'] = True
+                            item['googleMatchReason'] = match_reason
+                            spider.logger.warning(
+                                f"REJECTED Google match for {name!r}: {match_reason}. "
+                                f"Saving without Google rating, coordinates or photo."
+                            )
+                    else:
+                        place = None
+
+                    if place is not None:
                         # MERGE GOOGLE MAPS DATA INTO SCRAPY DATA
                         # We inject the Google Rating and Real Address into the Scrapy item
                         item['averageRating'] = place.get('rating', item.get('averageRating', 0.0))
                         item['reviewCount'] = place.get('user_ratings_total', item.get('reviewCount', 0))
                         item['address'] = place.get('formatted_address', item.get('address'))
+                        item['googleMatchConfidence'] = round(similarity, 3)
+                        item['googleMatchReason'] = match_reason
                         if place.get('place_id'):
                             item['googlePlaceId'] = place['place_id']
 
@@ -273,8 +298,8 @@ class MongoPipeline:
                             item['logoUrl'] = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference={photo_ref}&key={api_key}"
 
                         spider.logger.info(f"Successfully combined Scrapy data with Google Maps for: {name}")
-                    else:
-                        spider.logger.warning(f"No Google Maps match found for: {name}")
+                    elif not item.get('googleMatchRejected'):
+                        spider.logger.warning(f"No Google Maps result returned for: {name}")
             except Exception as e:
                 spider.logger.error(f"Google API integration failed: {e}")
 

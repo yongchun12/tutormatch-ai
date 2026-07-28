@@ -5,6 +5,7 @@ import { SystemLog } from '@/models/SystemLog';
 import { extractSubjectsFromText } from '@/services/scraperService';
 import { applyQualityGate } from '@/services/qualityGateService';
 import { syncCentreData } from '@/services/aiSyncService';
+import { parseMalaysianAddress } from '@/lib/address';
 
 function mapPriceLevel(level: number | undefined): string {
   if (level === 1) return "Inexpensive ($)";
@@ -111,6 +112,10 @@ export async function GET(request: Request) {
         const latitude = place.geometry?.location?.lat;
         const longitude = place.geometry?.location?.lng;
         const address = place.formatted_address || "Address not provided";
+        // `city: targetArea, state: "Malaysia"` used to be stored here, which
+        // filed Selangor and Penang as cities and a country as a state. Both
+        // now come from the address Google actually returned.
+        const parsedAddr = parseMalaysianAddress(place.formatted_address);
         const website = detailsData.result?.website || undefined;
 
         // ORDER MATTERS HERE.
@@ -128,8 +133,8 @@ export async function GET(request: Request) {
           name: place.name,
           description: "Discovered via Google Maps scheduled crawler. Please contact the centre for more information.",
           address,
-          city: targetArea,
-          state: "Malaysia",
+          city: parsedAddr.city,
+          state: parsedAddr.state,
           subjects: deducedSubjects,
           priceRange: mapPriceLevel(place.price_level),
           teachingMode: "physical",

@@ -9,7 +9,14 @@ export interface ITuitionCentre extends Document {
   state?: string;
   subjects: string[];
   priceRange: string;
-  teachingMode: "online" | "physical" | "hybrid";
+  /** Unset when the source never said. "Not specified" is shown, not a guess. */
+  teachingMode?: "online" | "physical" | "hybrid";
+  /** 0..1 name-similarity of the accepted Google Places match. */
+  googleMatchConfidence?: number;
+  /** Why the Places result was accepted, or why it was refused. */
+  googleMatchReason?: string;
+  /** True when a Places result was found but judged not to be this business. */
+  googleMatchRejected?: boolean;
   status: "pending" | "approved" | "rejected";
   logoUrl?: string;
   galleryUrls?: string[];
@@ -65,7 +72,12 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
     state: { type: String, default: "" },
     subjects: [{ type: String }],
     priceRange: { type: String, required: true }, // e.g. "$$" or "100-200"
-    teachingMode: { type: String, enum: ["online", "physical", "hybrid"], default: "physical" },
+    // No default: an unknown teaching mode is stored as absent rather than
+    // asserted as "physical". Same reasoning as the removed 4.0 rating default.
+    teachingMode: { type: String, enum: ["online", "physical", "hybrid"] },
+    googleMatchConfidence: { type: Number },
+    googleMatchReason: { type: String },
+    googleMatchRejected: { type: Boolean, default: false },
     status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
     logoUrl: { type: String },
     galleryUrls: [{ type: String }],
