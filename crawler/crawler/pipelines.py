@@ -42,7 +42,7 @@ VALID_STATUSES = ("pending", "approved", "rejected")
 #
 # A crawled centre is only published automatically when it clears every rule;
 # otherwise it is held as "pending" for an admin. Keep this in step with the
-# TypeScript version: both write to the same collection, so if they disagree the
+# TypeScript version: both write to the same database, so if they disagree the
 # same centre gets a different verdict depending on which crawler found it.
 # ---------------------------------------------------------------------------
 
@@ -63,7 +63,7 @@ def should_auto_publish(item):
     Return (auto_publish: bool, failed_criteria: list[str]).
 
     Criterion names match the GateCriterion union in quality-gate.ts so the
-    SystemLog counts line up across both crawlers.
+    GateDecision counts line up across both crawlers.
     """
     failed = []
 
@@ -86,10 +86,10 @@ def should_auto_publish(item):
     if not any(keyword in name for keyword in TUITION_NAME_KEYWORDS):
         failed.append("name-not-tuition-related")
 
-    # 5. At least one subject.
-    subjects = item.get("subjects") or []
-    if not isinstance(subjects, list) or not [s for s in subjects if str(s).strip()]:
-        failed.append("no-subjects")
+    # Missing subjects is deliberately NOT a gate criterion — see the note in
+    # web/src/lib/quality-gate.ts. An admin can judge whether something is a real
+    # tuition centre but cannot know what it teaches, so holding the record helps
+    # nobody. It is tracked by needs_enrichment() below instead.
 
     # TODO(Phase 4): add "low-match-confidence" (matchConfidence < 0.90) and
     # "unverified-ai-fields" once the merge step writes matchConfidence and
@@ -99,26 +99,34 @@ def should_auto_publish(item):
     return (len(failed) == 0, failed)
 
 
+def needs_enrichment(item):
+    """
+    True when the listing is publishable but incomplete — currently, when no
+    subjects are recorded. Mirrors needsEnrichment() in quality-gate.ts.
+    """
+    subjects = item.get("subjects") or []
+    if not isinstance(subjects, list):
+        return True
+    return not [s for s in subjects if str(s).strip()]
+
+
 def log_gate_decision(db, item, auto_publish, failed, context="python-crawler"):
     """
-    Record the decision in the same SystemLog collection the web app uses, with
-    the same structured fields, so the results chapter can count both crawlers
+    Record the decision in the same GateDecision collection the web app uses,
+    with the same field names, so the results chapter can count both crawlers
     together. Fails soft — losing a log line must not stop a centre being saved.
     """
     name = item.get("name") or "Unnamed centre"
     try:
-        if auto_publish:
-            message = f'{context} — Auto-published "{name}": passed all quality gate criteria.'
-        else:
-            message = f'{context} — Held "{name}" for review: {", ".join(failed)}'
-
-        db["systemlogs"].insert_one({
-            "level": "SUCCESS" if auto_publish else "INFO",
-            "source": "QUALITY_GATE",
-            "message": message,
+        # Written to gatedecisions, NOT systemlogs: systemlogs is a capped
+        # collection that overwrites its oldest entries, which would silently
+        # shrink these counts over time. See web/src/models/GateDecision.ts.
+        db["gatedecisions"].insert_one({
             "decision": "published" if auto_publish else "held",
+            "context": context,
             "criterion": failed[0] if failed else None,
             "failedCriteria": failed,
+            "needsEnrichment": needs_enrichment(item),
             "centreName": name,
             "createdAt": datetime.now(timezone.utc),
         })
@@ -245,6 +253,7 @@ class MongoPipeline:
         else:
             auto_publish, failed = should_auto_publish(doc)
             doc['status'] = "approved" if auto_publish else "pending"
+            doc['needsEnrichment'] = needs_enrichment(doc)
 
             self.db['tuitioncentres'].insert_one(doc)
             log_gate_decision(self.db, doc, auto_publish, failed, context="Scrapy crawl")

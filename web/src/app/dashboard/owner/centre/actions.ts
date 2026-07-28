@@ -1,6 +1,7 @@
 "use server";
 
 import { requireRole } from "@/lib/authz";
+import { needsEnrichment } from "@/lib/quality-gate";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { revalidatePath } from "next/cache";
@@ -50,6 +51,8 @@ export async function updateCentreAction(centreId: string, formData: FormData) {
       centre.teachingMode = teachingMode as "online" | "physical" | "hybrid";
     }
     centre.subjects = subjects;
+    // Clears (or re-raises) the admin "missing subjects" flag.
+    centre.needsEnrichment = needsEnrichment({ subjects });
     if (galleryUrls.length > 0 || centre.galleryUrls) {
       centre.galleryUrls = galleryUrls;
     }

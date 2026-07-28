@@ -6,7 +6,7 @@ import { TuitionCentre } from "@/models/TuitionCentre";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Search, Database, Plus, Edit } from "lucide-react";
+import { CheckCircle2, XCircle, Search, Database, Plus, Edit, BookOpen } from "lucide-react";
 import Link from "next/link";
 import { approveCentreAction, rejectCentreAction, deleteCentreAction } from "../actions";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -32,6 +32,22 @@ export default async function ManageCentres(props: {
     // Fetch centres with pagination
     const total = await TuitionCentre.countDocuments();
     const pendingCount = await TuitionCentre.countDocuments({ status: "pending" });
+
+    // Listings that are real and published but have no subjects recorded. These
+    // are NOT held by the quality gate — an admin cannot know what a centre
+    // teaches — so they are surfaced here to be filled in or re-synced.
+    const missingSubjects = await TuitionCentre.find({
+        needsEnrichment: true,
+        status: { $ne: "rejected" },
+    })
+        .select("name city state website")
+        .sort({ createdAt: -1 })
+        .limit(25)
+        .lean();
+    const missingSubjectsTotal = await TuitionCentre.countDocuments({
+        needsEnrichment: true,
+        status: { $ne: "rejected" },
+    });
     const allCentres = await TuitionCentre.find({})
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -58,6 +74,54 @@ export default async function ManageCentres(props: {
                     </Link>
                 </div>
             </div>
+
+            {missingSubjectsTotal > 0 && (
+                <Card className="rounded-3xl border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 shadow-sm">
+                    <CardHeader>
+                        <CardTitle className="font-heading text-lg flex items-center gap-2 text-amber-900 dark:text-amber-200">
+                            <BookOpen className="w-5 h-5" />
+                            Listings missing subjects ({missingSubjectsTotal})
+                        </CardTitle>
+                        <CardDescription className="text-amber-700 dark:text-amber-400">
+                            These centres are published but have no subjects recorded, so students
+                            cannot find them by subject. Sync from their website, or add subjects by hand.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ul className="divide-y divide-amber-200/60 dark:divide-amber-900/60">
+                            {missingSubjects.map((centre) => (
+                                <li
+                                    key={centre._id.toString()}
+                                    className="py-3 flex items-center justify-between gap-4"
+                                >
+                                    <div className="min-w-0">
+                                        <p className="font-medium text-slate-900 dark:text-white truncate">
+                                            {centre.name}
+                                        </p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                                            {[centre.city, centre.state].filter(Boolean).join(", ") || "Location unknown"}
+                                            {!centre.website && " · no website to sync from"}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <SyncButton centreId={centre._id.toString()} hasWebsite={!!centre.website} />
+                                        <Link href={`/dashboard/admin/centres/${centre._id.toString()}/edit`}>
+                                            <Button variant="outline" size="sm" className="h-8 gap-1">
+                                                <Edit className="w-3 h-3" /> Edit
+                                            </Button>
+                                        </Link>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                        {missingSubjectsTotal > missingSubjects.length && (
+                            <p className="text-xs text-amber-700 dark:text-amber-400 pt-3">
+                                Showing the {missingSubjects.length} most recent of {missingSubjectsTotal}.
+                            </p>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
 
             <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm">
                 <CardContent className="p-0">

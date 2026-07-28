@@ -5,7 +5,7 @@ import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { User } from "@/models/User";
 import { ClaimRequest } from "@/models/ClaimRequest";
-import { SystemLog } from "@/models/SystemLog";
+import { GateDecision } from "@/models/GateDecision";
 import { requireAdmin, requireUser } from "@/lib/authz";
 import { revalidatePath } from "next/cache";
 
@@ -53,21 +53,22 @@ export async function bulkApproveCentresAction(): Promise<{ approved: number }> 
 
     const approved = result.modifiedCount ?? 0;
 
-    // Recorded because bulk approval bypasses the per-centre review the gate
-    // was designed to trigger; the results chapter should be able to see how
-    // many centres were published this way rather than on their own merit.
+    // Recorded alongside the gate's own decisions because bulk approval bypasses
+    // the per-centre review the gate was designed to trigger. The results chapter
+    // should be able to separate "published on its own merit" from "published
+    // because an admin cleared the queue".
     if (approved > 0) {
         try {
-            await SystemLog.create({
-                level: "WARN",
-                source: "QUALITY_GATE",
-                message: `Admin bulk-approved ${approved} centre(s) from the pending queue without individual review.`,
+            await GateDecision.create({
                 decision: "published",
+                context: "admin-bulk-approve",
                 criterion: "admin-bulk-approve",
                 failedCriteria: ["admin-bulk-approve"],
+                needsEnrichment: false,
+                centreName: `${approved} centre(s) approved in bulk`,
             });
         } catch (error) {
-            console.error("Failed to log bulk approval:", error);
+            console.error("Failed to record bulk approval:", error);
         }
     }
 

@@ -75,6 +75,7 @@ export async function GET(request: Request) {
     let publishedCount = 0;
     let heldCount = 0;
     let syncedCount = 0;
+    let enrichmentCount = 0;
 
     for (const place of data.results) {
       const existing = await TuitionCentre.findOne({ 
@@ -92,14 +93,16 @@ export async function GET(request: Request) {
         
         // Deduce subjects from the place name and its Google reviews rather than
         // tagging every centre with the same generic list (which made subject
-        // filtering meaningless). Fall back to a neutral "General" tag when
-        // nothing subject-specific is detectable — many Google listings simply
-        // don't mention subjects, and inventing four for them is misleading.
+        // filtering meaningless).
+        //
+        // When nothing is detectable, leave the list EMPTY. It used to fall back
+        // to ["General"], which is not a subject anyone teaches — it made a gap
+        // in the data look like a fact, and it defeated the needsEnrichment flag
+        // by guaranteeing every record had at least one "subject".
         const reviewText = (detailsData.result?.reviews || [])
           .map((r: { text?: string }) => r.text || "")
           .join(" ");
-        const detectedSubjects = extractSubjectsFromText(`${place.name} ${reviewText}`);
-        const deducedSubjects = detectedSubjects.length > 0 ? detectedSubjects : ["General"];
+        const deducedSubjects = extractSubjectsFromText(`${place.name} ${reviewText}`);
 
         let logoUrl = place.photos && place.photos.length > 0
           ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${place.photos[0].photo_reference}&key=${apiKey}`
@@ -110,21 +113,17 @@ export async function GET(request: Request) {
         const address = place.formatted_address || "Address not provided";
         const website = detailsData.result?.website || undefined;
 
-        // Decide publish-vs-review with the shared rules rather than filing
-        // everything as "pending" and making an admin clear the queue by hand.
-        const gate = await applyQualityGate(
-          {
-            name: place.name,
-            address,
-            latitude,
-            longitude,
-            subjects: deducedSubjects,
-            googlePlaceId: place.place_id,
-            source: "google-places",
-          },
-          "cron"
-        );
-
+        // ORDER MATTERS HERE.
+        //
+        // 1. Save first, as "pending", so the record exists no matter what
+        //    happens next.
+        // 2. Enrich from the centre's own website — this is what actually fills
+        //    in subjects, pricing and announcements.
+        // 3. Only THEN run the quality gate, on the enriched data.
+        //
+        // Running the gate before step 2 (as this did originally) judged every
+        // centre on the sparse Google Places record alone and threw away the
+        // website's contribution entirely.
         const created = await TuitionCentre.create({
           name: place.name,
           description: "Discovered via Google Maps scheduled crawler. Please contact the centre for more information.",
@@ -134,7 +133,7 @@ export async function GET(request: Request) {
           subjects: deducedSubjects,
           priceRange: mapPriceLevel(place.price_level),
           teachingMode: "physical",
-          status: gate.status,
+          status: "pending", // provisional — settled by the gate below
           averageRating: place.rating || 0,
           reviewCount: place.user_ratings_total || 0,
           logoUrl: logoUrl || undefined,
@@ -150,15 +149,12 @@ export async function GET(request: Request) {
         });
 
         addedCount++;
-        if (gate.autoPublish) publishedCount++; else heldCount++;
 
-        // Enrich straight away from the centre's own website, so subjects,
-        // pricing and announcements are filled in without waiting for an admin
-        // to press "Sync" on each record.
+        // Step 2 — enrich from the website.
         //
-        // FAILS SOFT — deliberately: the centre is already saved above, and a
+        // FAILS SOFT, deliberately: the centre is already saved above, and a
         // dead link, a timeout or a Gemini outage must not undo that. Any error
-        // is logged and the crawl moves on to the next place.
+        // is logged and the crawl moves on.
         if (website) {
           try {
             await syncCentreData(created._id.toString());
@@ -173,6 +169,32 @@ export async function GET(request: Request) {
             }).catch(() => {});
           }
         }
+
+        // Step 3 — judge the enriched record. Re-read it because syncCentreData
+        // saved its own copy of the document; `created` is now stale.
+        const enriched = await TuitionCentre.findById(created._id).lean();
+
+        const gate = await applyQualityGate(
+          {
+            name: enriched?.name ?? place.name,
+            address: enriched?.address ?? address,
+            latitude: enriched?.latitude ?? latitude,
+            longitude: enriched?.longitude ?? longitude,
+            subjects: enriched?.subjects ?? deducedSubjects,
+            googlePlaceId: enriched?.googlePlaceId ?? place.place_id,
+            source: "google-places",
+          },
+          "cron",
+          created._id
+        );
+
+        await TuitionCentre.updateOne(
+          { _id: created._id },
+          { $set: { status: gate.status, needsEnrichment: gate.needsEnrichment } }
+        );
+
+        if (gate.autoPublish) publishedCount++; else heldCount++;
+        if (gate.needsEnrichment) enrichmentCount++;
       }
     }
 
@@ -182,7 +204,8 @@ export async function GET(request: Request) {
       message:
         `Scheduled scrape completed. Added ${addedCount} new centres ` +
         `(${publishedCount} auto-published, ${heldCount} held for review), ` +
-        `${syncedCount} enriched from their own website.`
+        `${syncedCount} enriched from their own website, ` +
+        `${enrichmentCount} still missing subjects.`
     });
 
     return NextResponse.json({
@@ -191,6 +214,7 @@ export async function GET(request: Request) {
       autoPublished: publishedCount,
       heldForReview: heldCount,
       websiteSynced: syncedCount,
+      missingSubjects: enrichmentCount,
     });
   } catch (error: any) {
     console.error("Cron Error:", error);

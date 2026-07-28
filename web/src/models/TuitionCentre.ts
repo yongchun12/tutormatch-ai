@@ -20,6 +20,13 @@ export interface ITuitionCentre extends Document {
   reviewCount: number;
   googlePlaceId?: string;
   isVerified?: boolean;
+  /**
+   * Published, but the listing is incomplete — currently means no subjects are
+   * recorded. Set by the quality gate; surfaced in the admin dashboard so the
+   * gap can be filled by a website sync or by hand. Deliberately separate from
+   * `status`: an incomplete listing is still a real centre.
+   */
+  needsEnrichment?: boolean;
   latitude?: number;
   longitude?: number;
   location?: {
@@ -59,6 +66,7 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
     reviewCount: { type: Number, default: 0 },
     googlePlaceId: { type: String },
     isVerified: { type: Boolean, default: false },
+    needsEnrichment: { type: Boolean, default: false },
     // Geographic coordinates used for distance-based recommendation scoring.
     latitude: { type: Number },
     longitude: { type: Number },
@@ -88,6 +96,8 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
 );
 
 TuitionCentreSchema.index({ location: "2dsphere" });
+// Drives the admin dashboard's "listings missing subjects" queue.
+TuitionCentreSchema.index({ needsEnrichment: 1, status: 1 });
 
 export const TuitionCentre: Model<ITuitionCentre> = 
   mongoose.models.TuitionCentre || mongoose.model<ITuitionCentre>("TuitionCentre", TuitionCentreSchema);

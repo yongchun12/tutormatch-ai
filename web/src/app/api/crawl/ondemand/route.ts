@@ -214,6 +214,7 @@ export async function GET(req: NextRequest) {
           priceRange: mapPriceLevel(place.price_level),
           teachingMode: "physical",
           status: gate.status,
+          needsEnrichment: gate.needsEnrichment,
           averageRating: place.rating || 0,
           reviewCount: place.user_ratings_total || 0,
           logoUrl: logoUrl || undefined,

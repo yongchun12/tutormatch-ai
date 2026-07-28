@@ -18,7 +18,6 @@ export type GateCriterion =
   | "missing-coordinates"
   | "missing-address"
   | "name-not-tuition-related"
-  | "no-subjects"
   // --- Phase 4 (not yet active; see PENDING_CRITERIA below) ---
   | "low-match-confidence"
   | "unverified-ai-fields";
@@ -31,7 +30,6 @@ export const CRITERION_LABELS: Record<GateCriterion, string> = {
   "missing-address": "Missing a usable street address",
   "name-not-tuition-related":
     "Name does not identify it as a tuition or learning centre",
-  "no-subjects": "No subjects recorded",
   "low-match-confidence": "Match confidence below 0.90",
   "unverified-ai-fields":
     "Subjects or price came only from AI extraction, with no second source",
@@ -188,13 +186,16 @@ export function shouldAutoPublish(centre: GateInput): GateResult {
     failedCriteria.push("name-not-tuition-related");
   }
 
-  // 5. At least one subject, so it can actually be matched to a student.
-  const subjects = centre.subjects ?? [];
-  if (!Array.isArray(subjects) || subjects.filter((s) => hasText(s)).length === 0) {
-    failedCriteria.push("no-subjects");
-  }
+  // Missing subjects is deliberately NOT a gate criterion. Holding a record
+  // only helps if a human can resolve it: an admin can judge whether something
+  // really is a tuition centre, but has no way to know which subjects it
+  // teaches. Since Google Places rarely states subjects, making it a gate rule
+  // held nearly every record for a review that could not answer the question.
+  // It is tracked separately by `needsEnrichment` below, which routes the
+  // record to enrichment (a website sync, or an owner filling it in) instead of
+  // to a reviewer who cannot help.
 
-  // 6. Phase 4 criteria — evaluated, then filtered out while still pending.
+  // 5. Phase 4 criteria — evaluated, then filtered out while still pending.
   for (const criterion of evaluatePendingCriteria(centre)) {
     if (!PENDING_CRITERIA.includes(criterion)) {
       failedCriteria.push(criterion);
@@ -222,4 +223,21 @@ export function describeGateDecision(name: string, result: GateResult): string {
     (result.failedCriteria.length > 1
       ? ` (+${result.failedCriteria.length - 1} more: ${result.failedCriteria.slice(1).join(", ")})`
       : "");
+}
+
+/**
+ * True when a centre is publishable but incomplete — specifically, when no
+ * subjects are recorded.
+ *
+ * Separate from the quality gate on purpose. The gate answers "is this a real
+ * tuition centre we can show?"; this answers "is the listing finished?". A
+ * centre can be perfectly real and still have nothing in its subjects list,
+ * because Google Places almost never states them. Those records are published
+ * (students can still find and contact them) but flagged so an admin can fill
+ * the gap or trigger a website sync.
+ */
+export function needsEnrichment(centre: GateInput): boolean {
+  const subjects = centre.subjects ?? [];
+  if (!Array.isArray(subjects)) return true;
+  return subjects.filter((s) => hasText(s)).length === 0;
 }

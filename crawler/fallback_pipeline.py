@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from crawler.pipelines import (
     apply_required_defaults,
     should_auto_publish,
+    needs_enrichment,
     log_gate_decision,
     REQUEST_TIMEOUT,
 )
@@ -173,6 +174,7 @@ def process_pipeline():
             # is published or held for admin review.
             auto_publish, failed = should_auto_publish(doc)
             doc["status"] = "approved" if auto_publish else "pending"
+            doc["needsEnrichment"] = needs_enrichment(doc)
 
             collection.insert_one(doc)
             log_gate_decision(db, doc, auto_publish, failed, context="Fallback pipeline")

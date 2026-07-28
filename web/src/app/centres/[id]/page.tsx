@@ -160,6 +160,45 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
     notFound();
   }
 
+  // Facts derived strictly from stored fields. Each entry is omitted when the
+  // underlying field is missing, so an unclaimed scraped listing simply shows
+  // fewer facts rather than invented ones.
+  const keyFacts: string[] = [];
+  {
+    const modeLabels: Record<string, string> = {
+      physical: "In-person classes at the centre",
+      online: "Online classes",
+      hybrid: "Both in-person and online classes",
+    };
+    const modeLabel = modeLabels[String(centre.mode).toLowerCase()];
+    if (modeLabel) keyFacts.push(modeLabel);
+
+    const subjectCount = centre.subjects?.length ?? 0;
+    if (subjectCount > 0) {
+      keyFacts.push(`${subjectCount} subject${subjectCount === 1 ? "" : "s"} listed`);
+    }
+
+    // "Contact for pricing" is the placeholder used when Google gave no price
+    // level, so it is not a fact worth stating.
+    if (centre.price && centre.price !== "Contact for pricing") {
+      keyFacts.push(`Fees: ${centre.price}`);
+    }
+
+    if (centre.isVerified) {
+      keyFacts.push("Ownership verified by TutorMatch");
+    }
+
+    if (centre.reviews > 0) {
+      keyFacts.push(
+        `${centre.rating.toFixed(1)}★ from ${centre.reviews} review${centre.reviews === 1 ? "" : "s"}`
+      );
+    }
+
+    if (centre.galleryUrls.length > 0) {
+      keyFacts.push(`${centre.galleryUrls.length} photo${centre.galleryUrls.length === 1 ? "" : "s"} from the centre`);
+    }
+  }
+
   return (
     <div className="bg-slate-50 dark:bg-slate-950 min-h-screen pb-20">
       {/* Premium Hero Section */}
@@ -282,26 +321,33 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm">
-                  <CardHeader>
-                    <CardTitle className="font-heading text-xl">Key Highlights</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {[
-                        "90% of students scored A/A* in SPM 2024",
-                        "Small class sizes (Max 15 students)",
-                        "Monthly progress reports powered by AI",
-                        "Free access to digital resource library"
-                      ].map((highlight, i) => (
-                        <div key={i} className="flex items-start gap-3">
-                          <CheckCircle2 className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
-                          <span className="text-slate-700 dark:text-slate-300">{highlight}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
+                {/*
+                  Key Facts — built only from fields actually stored for THIS
+                  centre. This panel previously rendered four fixed marketing
+                  claims ("90% of students scored A/A* in SPM 2024", "Max 15
+                  students", …) on every centre page, including real businesses
+                  that never said any of it. Nothing here is generated: if a
+                  field is empty it is omitted, and if nothing is known the card
+                  does not render at all.
+                */}
+                {keyFacts.length > 0 && (
+                  <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="font-heading text-xl">Key Facts</CardTitle>
+                      <CardDescription>Taken from this centre&apos;s listing.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {keyFacts.map((fact) => (
+                          <div key={fact} className="flex items-start gap-3">
+                            <CheckCircle2 className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
+                            <span className="text-slate-700 dark:text-slate-300">{fact}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
 
               {/* GALLERY TAB */}

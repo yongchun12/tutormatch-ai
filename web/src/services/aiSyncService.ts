@@ -3,6 +3,7 @@ import { TuitionCentre } from "@/models/TuitionCentre";
 import * as cheerio from "cheerio";
 import { GoogleGenAI } from "@google/genai";
 import { checkPublicUrl, describeRejection } from "@/lib/url-safety";
+import { needsEnrichment } from "@/lib/quality-gate";
 
 /** Give up on a slow website rather than holding the request open forever. */
 const FETCH_TIMEOUT_MS = 10_000;
@@ -180,6 +181,10 @@ export async function syncCentreData(centreId: string) {
         }
 
         if (updated) {
+            // The whole point of a sync is to fill the gaps, so re-evaluate the
+            // flag that says gaps remain. Otherwise a centre stays in the admin
+            // "missing subjects" queue forever after being fixed.
+            centre.needsEnrichment = needsEnrichment({ subjects: centre.subjects });
             await centre.save();
         }
 
