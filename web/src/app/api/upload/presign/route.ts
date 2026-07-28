@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireRole, authorizationErrorResponse } from "@/lib/authz";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -20,12 +19,8 @@ const s3Client = new S3Client({
 
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions);
-
     // Only allow centre owners to upload media
-    if (!session || !session.user || (session.user as any).role !== "owner") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const user = await requireRole("owner");
 
     if (!accessKeyId || !secretAccessKey || !bucketName) {
       console.error("AWS S3 credentials missing from environment variables.");
@@ -46,7 +41,7 @@ export async function POST(request: Request) {
     // Generate a secure random filename to prevent collisions and directory traversal
     const uniqueId = crypto.randomUUID();
     const extension = filename.split(".").pop();
-    const objectKey = `galleries/${(session.user as any).id}/${uniqueId}.${extension}`;
+    const objectKey = `galleries/${user.id}/${uniqueId}.${extension}`;
 
     const command = new PutObjectCommand({
       Bucket: bucketName,
@@ -60,6 +55,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ signedUrl, publicUrl, objectKey });
   } catch (error: any) {
+    const denied = authorizationErrorResponse(error);
+    if (denied) return denied;
+
     console.error("Presign URL Generation Error:", error);
     return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }

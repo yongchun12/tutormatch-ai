@@ -1,22 +1,18 @@
 "use server";
 
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireRole } from "@/lib/authz";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { revalidatePath } from "next/cache";
 
 export async function updateCentreAction(centreId: string, formData: FormData) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user || (session.user as any).role !== "owner") {
-      return { error: "Unauthorized" };
-    }
+    const user = await requireRole("owner");
 
     await dbConnect();
-    
+
     // Ensure the centre belongs to the logged-in owner
-    const centre = await TuitionCentre.findOne({ _id: centreId, ownerId: (session.user as any).id });
+    const centre = await TuitionCentre.findOne({ _id: centreId, ownerId: user.id });
     if (!centre) {
       return { error: "Centre not found or you do not have permission to edit it." };
     }

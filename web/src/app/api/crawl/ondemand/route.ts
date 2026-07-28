@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { SystemLog } from "@/models/SystemLog";
-import { getSessionUser } from "@/lib/authz";
+import { requireAdmin, authorizationErrorResponse } from "@/lib/authz";
+import { applyQualityGate } from "@/services/qualityGateService";
 
 // Subject keywords mapping for smart extraction
 const SUBJECT_KEYWORDS: Record<string, string[]> = {
@@ -56,10 +57,7 @@ function mapPriceLevel(level: number | undefined): string {
 export async function GET(req: NextRequest) {
   try {
     // Billable Google Places calls + DB writes — admins only.
-    const user = await getSessionUser();
-    if (!user || user.role !== "admin") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    await requireAdmin();
 
     const { searchParams } = new URL(req.url);
     const address = searchParams.get("address");
@@ -192,7 +190,20 @@ export async function GET(req: NextRequest) {
            longitude: existing.longitude,
         });
       } else {
-        // Create new
+        // Create new — the shared rules decide publish vs. review.
+        const gate = await applyQualityGate(
+          {
+            name,
+            address: place.formatted_address,
+            latitude: place.geometry?.location?.lat,
+            longitude: place.geometry?.location?.lng,
+            subjects: deducedSubjects,
+            googlePlaceId: place.place_id,
+            source: "google-places",
+          },
+          "ondemand-crawl"
+        );
+
         const newRecord = await TuitionCentre.create({
           name: name,
           description: "Discovered via Google Maps. Please contact the centre for more information.",
@@ -202,7 +213,7 @@ export async function GET(req: NextRequest) {
           subjects: deducedSubjects,
           priceRange: mapPriceLevel(place.price_level),
           teachingMode: "physical",
-          status: "approved",
+          status: gate.status,
           averageRating: place.rating || 0,
           reviewCount: place.user_ratings_total || 0,
           logoUrl: logoUrl || undefined,
@@ -248,6 +259,9 @@ export async function GET(req: NextRequest) {
     });
 
   } catch (error: any) {
+    const denied = authorizationErrorResponse(error);
+    if (denied) return denied;
+
     console.error("Crawl Error:", error);
     try {
       await SystemLog.create({

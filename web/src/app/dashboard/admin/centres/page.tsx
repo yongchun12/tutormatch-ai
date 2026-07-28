@@ -12,6 +12,7 @@ import { approveCentreAction, rejectCentreAction, deleteCentreAction } from "../
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SyncButton } from "./SyncButton";
 import { ActionModal } from "@/components/ui/action-modal";
+import { BulkApproveButton } from "@/components/admin/BulkApproveButton";
 
 export default async function ManageCentres(props: {
     searchParams: Promise<{ page?: string }>
@@ -30,6 +31,7 @@ export default async function ManageCentres(props: {
 
     // Fetch centres with pagination
     const total = await TuitionCentre.countDocuments();
+    const pendingCount = await TuitionCentre.countDocuments({ status: "pending" });
     const allCentres = await TuitionCentre.find({})
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -47,11 +49,14 @@ export default async function ManageCentres(props: {
                     </h1>
                     <p className="text-slate-500 dark:text-slate-400">View, approve, reject, or delete tuition centres across the platform.</p>
                 </div>
-                <Link href="/dashboard/admin/centres/new">
-                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
-                        <Plus className="w-4 h-4" /> Add Centre
-                    </Button>
-                </Link>
+                <div className="flex items-center gap-3">
+                    <BulkApproveButton pendingCount={pendingCount} />
+                    <Link href="/dashboard/admin/centres/new">
+                        <Button className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2">
+                            <Plus className="w-4 h-4" /> Add Centre
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm">

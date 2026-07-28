@@ -3,22 +3,18 @@
 import dbConnect from "@/lib/db";
 import { Enquiry } from "@/models/Enquiry";
 import { revalidatePath } from "next/cache";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireUser } from "@/lib/authz";
 
 export async function updateEnquiryStatusAction(enquiryId: string, status: string) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user) {
-            throw new Error("Unauthorized");
-        }
+        const user = await requireUser();
 
         await dbConnect();
 
         // Authorize: admins may update any enquiry; owners only enquiries for a
         // centre they own. Students cannot change enquiry status.
-        const role = (session.user as any).role;
-        const userId = (session.user as any).id;
+        const role = user.role;
+        const userId = user.id;
 
         const enquiry = await Enquiry.findById(enquiryId).populate("centreId");
         if (!enquiry) {

@@ -49,10 +49,12 @@ function toCard(r: CentreDoc) {
 }
 
 function findCentres(filter: Record<string, unknown>) {
-  // The advisor searches every real listing regardless of approval state, since
-  // "approved" only reflects admin/ownership workflow — not whether the centre
-  // exists. Only admin-"rejected" listings are excluded.
-  return TuitionCentre.find({ status: { $ne: "rejected" }, ...filter })
+  // Approved listings only. This previously used `status: { $ne: "rejected" }`,
+  // which also swept in "pending" centres — unreviewed crawler imports the
+  // advisor would then recommend to a student. Anything crawled now has to pass
+  // the quality gate in lib/quality-gate.ts (or an admin) before it is approved
+  // and therefore before the advisor can suggest it.
+  return TuitionCentre.find({ status: "approved", ...filter })
     .sort({ averageRating: -1, reviewCount: -1 })
     .limit(5)
     .select(CARD_FIELDS)

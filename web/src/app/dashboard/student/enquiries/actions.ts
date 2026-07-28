@@ -3,22 +3,18 @@
 import dbConnect from "@/lib/db";
 import { Enquiry } from "@/models/Enquiry";
 import { revalidatePath } from "next/cache";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireRole, isAuthorizationError } from "@/lib/authz";
 
 export async function deleteEnquiryAction(enquiryId: string) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user || (session.user as any).role !== "student") {
-            throw new Error("Unauthorized");
-        }
+        const user = await requireRole("student");
 
         await dbConnect();
-        
+
         // Ensure the enquiry belongs to the student
-        await Enquiry.findOneAndDelete({ 
-            _id: enquiryId, 
-            studentId: (session.user as any).id 
+        await Enquiry.findOneAndDelete({
+            _id: enquiryId,
+            studentId: user.id
         });
 
         revalidatePath("/dashboard/student/enquiries");
@@ -30,10 +26,7 @@ export async function deleteEnquiryAction(enquiryId: string) {
 
 export async function updateEnquiryMessageAction(formData: FormData) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user || (session.user as any).role !== "student") {
-            throw new Error("Unauthorized");
-        }
+        const user = await requireRole("student");
 
         const enquiryId = formData.get("enquiryId") as string;
         const message = formData.get("message") as string;
@@ -46,7 +39,7 @@ export async function updateEnquiryMessageAction(formData: FormData) {
 
         // Only allow updating if it is still pending
         const enquiry = await Enquiry.findOneAndUpdate(
-            { _id: enquiryId, studentId: (session.user as any).id, status: "pending" },
+            { _id: enquiryId, studentId: user.id, status: "pending" },
             { message: message },
             { new: true }
         );

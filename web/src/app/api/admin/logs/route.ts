@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import { SystemLog } from "@/models/SystemLog";
-import { getSessionUser } from "@/lib/authz";
+import { requireAdmin, authorizationErrorResponse } from "@/lib/authz";
 
 /** Recent system logs for the admin dashboard's live feed (admin only). */
 export async function GET() {
-  const user = await getSessionUser();
-  if (!user || user.role !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
+    await requireAdmin();
+
     await dbConnect();
     const rows = await SystemLog.find().sort({ createdAt: -1 }).limit(30).lean();
     const logs = rows.map((l: any) => ({
@@ -22,6 +19,9 @@ export async function GET() {
     }));
     return NextResponse.json({ logs });
   } catch (error) {
+    const denied = authorizationErrorResponse(error);
+    if (denied) return denied;
+
     console.error("Admin logs error:", error);
     return NextResponse.json({ logs: [] }, { status: 200 });
   }

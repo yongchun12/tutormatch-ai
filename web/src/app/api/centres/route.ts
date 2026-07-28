@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
-import { getSessionUser } from "@/lib/authz";
+import { requireAnyRole, authorizationErrorResponse } from "@/lib/authz";
 
 export async function GET(request: Request) {
   try {
@@ -37,13 +37,7 @@ export async function POST(request: Request) {
   try {
     // Only signed-in owners/admins may submit a centre — otherwise anyone could
     // flood the pending queue with unauthenticated POSTs.
-    const user = await getSessionUser();
-    if (!user || (user.role !== "owner" && user.role !== "admin")) {
-      return NextResponse.json(
-        { success: false, error: "Unauthorized: sign in as an owner or admin to submit a centre." },
-        { status: 401 }
-      );
-    }
+    const user = await requireAnyRole("owner", "admin");
 
     await dbConnect();
     const body = await request.json();
@@ -65,6 +59,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, data: newCentre }, { status: 201 });
   } catch (error: any) {
+    const denied = authorizationErrorResponse(error);
+    if (denied) return denied;
+
     return NextResponse.json({ success: false, error: error.message }, { status: 400 });
   }
 }

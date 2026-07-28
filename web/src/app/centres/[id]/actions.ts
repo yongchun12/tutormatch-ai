@@ -7,15 +7,11 @@ import { User } from "@/models/User";
 import { Enquiry } from "@/models/Enquiry";
 import { aiService } from "@/services/aiService";
 import { revalidatePath } from "next/cache";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireUser, isAuthorizationError } from "@/lib/authz";
 
 export async function submitReviewAction(formData: FormData) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user) {
-            throw new Error("You must be logged in to submit a review.");
-        }
+        const user = await requireUser();
 
         const centreId = formData.get("centreId") as string;
         const comment = formData.get("comment") as string;
@@ -33,7 +29,7 @@ export async function submitReviewAction(formData: FormData) {
 
         // Save the review to MongoDB
         await Review.create({
-            userId: (session.user as any).id,
+            userId: user.id,
             centreId: centreId,
             rating: rating,
             comment: comment,
@@ -57,10 +53,7 @@ export async function submitReviewAction(formData: FormData) {
 
 export async function submitEnquiryAction(formData: FormData) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user) {
-            throw new Error("You must be logged in to send an enquiry.");
-        }
+        const user = await requireUser();
 
         const centreId = formData.get("centreId") as string;
         const message = formData.get("message") as string;
@@ -73,7 +66,7 @@ export async function submitEnquiryAction(formData: FormData) {
 
         // Save the Enquiry to MongoDB
         await Enquiry.create({
-            studentId: (session.user as any).id,
+            studentId: user.id,
             centreId: centreId,
             message: message,
             status: "pending"
@@ -92,21 +85,17 @@ export async function submitEnquiryAction(formData: FormData) {
 
 export async function toggleSaveCentreAction(centreId: string) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user) {
-            throw new Error("You must be logged in to save a centre.");
-        }
+        const user = await requireUser();
 
         await dbConnect();
         
-        const userId = (session.user as any).id;
-        const user = await User.findById(userId);
-        
-        if (!user) {
+        const userDoc = await User.findById(user.id);
+
+        if (!userDoc) {
             throw new Error("User not found");
         }
 
-        const savedCentres = user.savedCentres || [];
+        const savedCentres = userDoc.savedCentres || [];
         // Map to strings to find index
         const savedStrings = savedCentres.map((id: any) => id.toString());
         const index = savedStrings.indexOf(centreId);
@@ -122,8 +111,8 @@ export async function toggleSaveCentreAction(centreId: string) {
             isSaved = true;
         }
 
-        user.savedCentres = savedCentres;
-        await user.save();
+        userDoc.savedCentres = savedCentres;
+        await userDoc.save();
 
         revalidatePath(`/centres/${centreId}`);
         revalidatePath(`/dashboard/student/saved`);

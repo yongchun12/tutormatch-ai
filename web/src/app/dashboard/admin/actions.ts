@@ -5,6 +5,7 @@ import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { User } from "@/models/User";
 import { ClaimRequest } from "@/models/ClaimRequest";
+import { SystemLog } from "@/models/SystemLog";
 import { requireAdmin, requireUser } from "@/lib/authz";
 import { revalidatePath } from "next/cache";
 
@@ -28,6 +29,53 @@ export async function approveCentreAction(centreId: string) {
 
     revalidatePath("/dashboard/admin");
     revalidatePath("/centres");
+}
+
+/**
+ * Approve every centre currently sitting in the pending queue.
+ *
+ * The quality gate (lib/quality-gate.ts) already publishes clean records
+ * automatically, so what lands here is the genuinely doubtful remainder. This
+ * clears it in one action instead of one click per centre.
+ *
+ * Returns the number approved so the UI can report it honestly, and only ever
+ * touches "pending" rows — a rejected centre stays rejected.
+ */
+export async function bulkApproveCentresAction(): Promise<{ approved: number }> {
+    await requireAdmin();
+
+    await dbConnect();
+
+    const result = await TuitionCentre.updateMany(
+        { status: "pending" },
+        { $set: { status: "approved" } }
+    );
+
+    const approved = result.modifiedCount ?? 0;
+
+    // Recorded because bulk approval bypasses the per-centre review the gate
+    // was designed to trigger; the results chapter should be able to see how
+    // many centres were published this way rather than on their own merit.
+    if (approved > 0) {
+        try {
+            await SystemLog.create({
+                level: "WARN",
+                source: "QUALITY_GATE",
+                message: `Admin bulk-approved ${approved} centre(s) from the pending queue without individual review.`,
+                decision: "published",
+                criterion: "admin-bulk-approve",
+                failedCriteria: ["admin-bulk-approve"],
+            });
+        } catch (error) {
+            console.error("Failed to log bulk approval:", error);
+        }
+    }
+
+    revalidatePath("/dashboard/admin");
+    revalidatePath("/dashboard/admin/centres");
+    revalidatePath("/centres");
+
+    return { approved };
 }
 
 export async function verifyCentreAction(centreId: string) {

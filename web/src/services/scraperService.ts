@@ -1,5 +1,6 @@
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
+import { applyQualityGate } from "@/services/qualityGateService";
 
 // ---------------------------------------------------------------------------
 // Lightweight, chat-facing live discovery.
@@ -141,6 +142,21 @@ export async function discoverAndSyncCentres(
       if (!existing.logoUrl && logoUrl) existing.logoUrl = logoUrl;
       await existing.save();
     } else {
+      // Was hard-coded to "approved", which published unchecked Google results
+      // straight to students. The shared rules decide now.
+      const gate = await applyQualityGate(
+        {
+          name,
+          address,
+          latitude: lat,
+          longitude: lng,
+          subjects,
+          googlePlaceId: place.place_id,
+          source: "google-places",
+        },
+        "chat-discovery"
+      );
+
       await TuitionCentre.create({
         name,
         description: "Discovered via Google Maps. Contact the centre for more details.",
@@ -150,7 +166,7 @@ export async function discoverAndSyncCentres(
         subjects,
         priceRange: mapPriceLevel(place.price_level),
         teachingMode: "physical",
-        status: "approved",
+        status: gate.status,
         averageRating: place.rating || 0,
         reviewCount: place.user_ratings_total || 0,
         logoUrl,
@@ -244,12 +260,25 @@ export async function scrapeLocation(locationQuery: string) {
                 console.error(`Failed to fetch details for ${place.place_id}`, err);
             }
 
-            const existing = await TuitionCentre.findOne({ name });
-            
             const latitude = place.geometry?.location?.lat;
             const longitude = place.geometry?.location?.lng;
+
+            const existing = await TuitionCentre.findOne({ name });
             
             if (!existing) {
+                const gate = await applyQualityGate(
+                    {
+                        name,
+                        address,
+                        latitude,
+                        longitude,
+                        subjects: deducedSubjects,
+                        googlePlaceId: place.place_id,
+                        source: "google-places",
+                    },
+                    "scraper-service"
+                );
+
                 await TuitionCentre.create({
                     name: name,
                     description: `Verified Google Maps Listing. ${address}`,
@@ -259,10 +288,11 @@ export async function scrapeLocation(locationQuery: string) {
                     subjects: deducedSubjects,
                     priceRange: mapPriceLevel(place.price_level),
                     teachingMode: "physical",
-                    status: "approved", 
+                    status: gate.status,
                     averageRating: rating,
                     reviewCount: reviewCount, 
                     logoUrl: logoUrl,
+                    googlePlaceId: place.place_id,
                     website: website,
                     contactNumber: contactNumber,
                     latitude: latitude,

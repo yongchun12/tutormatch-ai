@@ -4,15 +4,11 @@ import dbConnect from "@/lib/db";
 import { Enquiry } from "@/models/Enquiry";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { revalidatePath } from "next/cache";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireRole } from "@/lib/authz";
 
 export async function replyToEnquiryAction(formData: FormData) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user || (session.user as any).role !== "owner") {
-            throw new Error("Unauthorized");
-        }
+        const user = await requireRole("owner");
 
         const enquiryId = formData.get("enquiryId") as string;
         const replyMessage = formData.get("replyMessage") as string;
@@ -30,7 +26,10 @@ export async function replyToEnquiryAction(formData: FormData) {
             throw new Error("Enquiry not found");
         }
         
-        if ((enquiry.centreId as any).ownerId.toString() !== (session.user as any).id) {
+        // The populated centre may have no owner at all (scraped listings), so
+        // check before calling toString() on it.
+        const centreOwnerId = (enquiry.centreId as any)?.ownerId;
+        if (!centreOwnerId || centreOwnerId.toString() !== user.id) {
             throw new Error("Unauthorized: You do not own this centre");
         }
 

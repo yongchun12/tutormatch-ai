@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Users, MessageSquare, TrendingUp, BarChart3, Settings, LogOut, ArrowUpRight, Clock, AlertTriangle } from "lucide-react";
+import { Sparkles, Users, MessageSquare, TrendingUp, BarChart3, Settings, LogOut, ArrowUpRight, Clock, AlertTriangle, Megaphone } from "lucide-react";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { Enquiry } from "@/models/Enquiry";
@@ -14,6 +14,7 @@ import { StudentLead } from "@/models/StudentLead";
 import { User } from "@/models/User";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
 import { createStarterCentreAction } from "./actions";
+import AnnouncementsManager, { type AnnouncementView } from "@/components/owner/AnnouncementsManager";
 
 export default async function OwnerDashboard() {
   const session = await getServerSession(authOptions);
@@ -35,6 +36,16 @@ export default async function OwnerDashboard() {
     .lean();
 
   let enquiries: any[] = [];
+  // Newest first, and serialised to plain values because a Server Component
+  // cannot hand Date or ObjectId instances to a Client Component.
+  const announcements: AnnouncementView[] = [...(myCentre?.announcements ?? [])]
+    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .map((a: any) => ({
+      id: a._id.toString(),
+      content: a.content,
+      date: new Date(a.date).toISOString(),
+      source: a.source === "ai-sync" ? "ai-sync" : "owner",
+    }));
   let aiPos = 0;
   let totalReviews = 0;
   let topPraises: string[] = [];
@@ -197,6 +208,25 @@ export default async function OwnerDashboard() {
                   </CardContent>
                 </Card>
 
+                {/* Announcements */}
+                <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm">
+                  <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
+                    <div className="flex items-center gap-2">
+                      <Megaphone className="w-5 h-5 text-indigo-500" />
+                      <CardTitle className="font-heading text-lg">Announcements</CardTitle>
+                    </div>
+                    <CardDescription>
+                      Post news for students. These appear on your public centre page, newest first.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <AnnouncementsManager
+                      centreId={myCentre._id.toString()}
+                      announcements={announcements}
+                    />
+                  </CardContent>
+                </Card>
+
                 {/* Recent Enquiries */}
                 <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm">
                   <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4 flex flex-row items-center justify-between">
@@ -283,9 +313,6 @@ export default async function OwnerDashboard() {
                                 <div>
                                   <div className="flex items-center gap-2 mb-1">
                                     <h4 className="font-bold text-slate-900 dark:text-white text-lg">{student.name || "Unknown Student"}</h4>
-                                    {lead.wantsNewsletter && (
-                                      <Badge variant="outline" className="text-[10px] h-5 border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">Subscribed</Badge>
-                                    )}
                                   </div>
                                   <p className="text-sm text-slate-500 dark:text-slate-400">{student.email}</p>
                                 </div>

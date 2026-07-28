@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireAdmin, authorizationErrorResponse } from "@/lib/authz";
 import { syncCentreData } from "@/services/aiSyncService";
 
 export async function POST(
@@ -8,10 +7,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user || (session.user as any).role !== "admin") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    await requireAdmin();
 
     const resolvedParams = await params;
     const { id } = resolvedParams;
@@ -27,6 +23,9 @@ export async function POST(
       data: result
     });
   } catch (error: any) {
+    const denied = authorizationErrorResponse(error);
+    if (denied) return denied;
+
     console.error("AI Sync Error:", error);
     return NextResponse.json(
       { error: "AI Sync failed", message: error.message },

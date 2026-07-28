@@ -11,7 +11,6 @@ export default function PreferencesForm() {
   const [location, setLocation] = useState("");
   const [maxDistanceKm, setMaxDistanceKm] = useState(25);
   const [remark, setRemark] = useState("");
-  const [wantsNewsletter, setWantsNewsletter] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
@@ -67,7 +66,7 @@ export default function PreferencesForm() {
       const res = await fetch("/api/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, location, remark, wantsNewsletter, maxDistanceKm }),
+        body: JSON.stringify({ subject, location, remark, maxDistanceKm }),
       });
 
       const data = await res.json();
@@ -203,21 +202,7 @@ export default function PreferencesForm() {
         />
       </div>
 
-      <div className="flex items-start gap-3 p-4 rounded-xl bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800/50">
-        <input 
-          type="checkbox" 
-          id="newsletter"
-          checked={wantsNewsletter}
-          onChange={(e) => setWantsNewsletter(e.target.checked)}
-          className="mt-1 w-4 h-4 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-500"
-        />
-        <label htmlFor="newsletter" className="text-sm text-slate-600 dark:text-slate-400 cursor-pointer">
-          <strong className="text-slate-900 dark:text-slate-200 block mb-0.5">Subscribe to Newsletter</strong>
-          Get weekly updates on the best tuition centres, learning tips, and exclusive discounts directly in your inbox.
-        </label>
-      </div>
-
-      <Button 
+      <Button
         type="submit" 
         disabled={loading}
         className="w-full py-6 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-xl shadow-indigo-500/20 text-base font-medium mt-4"

@@ -4,15 +4,11 @@ import dbConnect from "@/lib/db";
 import { Review } from "@/models/Review";
 import { recalculateCentreRating } from "@/lib/review-helpers";
 import { revalidatePath } from "next/cache";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireAdmin } from "@/lib/authz";
 
 export async function adminDeleteReviewAction(reviewId: string, formData?: FormData) {
     try {
-        const session = await getServerSession(authOptions);
-        if (!session || !session.user || (session.user as any).role !== "admin") {
-            throw new Error("Unauthorized");
-        }
+        await requireAdmin();
 
         await dbConnect();
 

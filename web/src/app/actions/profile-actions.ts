@@ -3,19 +3,15 @@
 import dbConnect from "@/lib/db";
 import { User } from "@/models/User";
 import { revalidatePath } from "next/cache";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireUser } from "@/lib/authz";
 import bcrypt from "bcryptjs";
 
 export async function updateUserProfileAction(formData: FormData) {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-        throw new Error("Unauthorized");
-    }
+    const sessionUser = await requireUser();
 
     await dbConnect();
-    
-    const id = (session.user as any).id;
+
+    const id = sessionUser.id;
     const name = formData.get("name") as string;
     const email = formData.get("email") as string;
     const currentPassword = formData.get("currentPassword") as string;

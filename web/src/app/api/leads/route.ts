@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { requireUser, authorizationErrorResponse } from "@/lib/authz";
 import dbConnect from "@/lib/db";
 import { StudentLead } from "@/models/StudentLead";
 import { User } from "@/models/User";
@@ -8,16 +7,12 @@ import { User } from "@/models/User";
 export async function POST(req: Request) {
   try {
     // 1. Verify Authentication
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return NextResponse.json({ error: "Unauthorized. Please log in first." }, { status: 401 });
-    }
-
-    const userId = (session.user as any).id;
+    const user = await requireUser();
+    const userId = user.id;
 
     // 2. Parse payload
     const body = await req.json();
-    const { subject, location, wantsNewsletter, remark, maxDistanceKm } = body;
+    const { subject, location, remark, maxDistanceKm } = body;
 
     if (!subject || !location) {
       return NextResponse.json({ error: "Subject and location are required." }, { status: 400 });
@@ -39,7 +34,6 @@ export async function POST(req: Request) {
       studentId: userId,
       subject,
       location,
-      wantsNewsletter: !!wantsNewsletter,
       remark: remark || "",
     });
 
@@ -51,7 +45,7 @@ export async function POST(req: Request) {
         const mapRes = await fetch(url);
         const mapData = await mapRes.json();
         
-        if (mapData.status === "OK" && mapData.results.length > 0) {
+        if (mapData.status === "OK" && mapData.results?.length > 0) {
           const lat = mapData.results[0].geometry.location.lat;
           const lng = mapData.results[0].geometry.location.lng;
           await User.findByIdAndUpdate(userId, {
@@ -155,6 +149,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, lead }, { status: 201 });
   } catch (error: any) {
+    const denied = authorizationErrorResponse(error);
+    if (denied) return denied;
+
     console.error("Failed to save lead:", error);
     return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }

@@ -3,6 +3,8 @@ import dbConnect from '@/lib/db';
 import { TuitionCentre } from '@/models/TuitionCentre';
 import { SystemLog } from '@/models/SystemLog';
 import { extractSubjectsFromText } from '@/services/scraperService';
+import { applyQualityGate } from '@/services/qualityGateService';
+import { syncCentreData } from '@/services/aiSyncService';
 
 function mapPriceLevel(level: number | undefined): string {
   if (level === 1) return "Inexpensive ($)";
@@ -13,9 +15,20 @@ function mapPriceLevel(level: number | undefined): string {
 }
 
 export async function GET(request: Request) {
-  // Optional: Verify the request is coming from Vercel via authorization header
+  // Verify the request really is the scheduler, via the bearer token Vercel Cron
+  // sends. This FAILS CLOSED: with no CRON_SECRET configured the route is
+  // refused outright rather than left open. It used to be `if (CRON_SECRET &&
+  // ...)`, which silently skipped the whole check whenever the variable was
+  // unset — leaving an endpoint that spends Google Places quota and writes to
+  // the database open to anyone who knew the URL.
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    console.error('CRON_SECRET is not configured; refusing to run the scheduled scrape.');
+    return new NextResponse('Cron is not configured', { status: 503 });
+  }
+
   const authHeader = request.headers.get('authorization');
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
@@ -59,7 +72,10 @@ export async function GET(request: Request) {
     }
 
     let addedCount = 0;
-    
+    let publishedCount = 0;
+    let heldCount = 0;
+    let syncedCount = 0;
+
     for (const place of data.results) {
       const existing = await TuitionCentre.findOne({ 
         $or: [
@@ -88,42 +104,94 @@ export async function GET(request: Request) {
         let logoUrl = place.photos && place.photos.length > 0
           ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${place.photos[0].photo_reference}&key=${apiKey}`
           : undefined;
-          
-        await TuitionCentre.create({
+
+        const latitude = place.geometry?.location?.lat;
+        const longitude = place.geometry?.location?.lng;
+        const address = place.formatted_address || "Address not provided";
+        const website = detailsData.result?.website || undefined;
+
+        // Decide publish-vs-review with the shared rules rather than filing
+        // everything as "pending" and making an admin clear the queue by hand.
+        const gate = await applyQualityGate(
+          {
+            name: place.name,
+            address,
+            latitude,
+            longitude,
+            subjects: deducedSubjects,
+            googlePlaceId: place.place_id,
+            source: "google-places",
+          },
+          "cron"
+        );
+
+        const created = await TuitionCentre.create({
           name: place.name,
           description: "Discovered via Google Maps scheduled crawler. Please contact the centre for more information.",
-          address: place.formatted_address || "Address not provided",
+          address,
           city: targetArea,
           state: "Malaysia",
           subjects: deducedSubjects,
           priceRange: mapPriceLevel(place.price_level),
           teachingMode: "physical",
-          status: "pending", // Scheduled crawls go to pending queue
+          status: gate.status,
           averageRating: place.rating || 0,
           reviewCount: place.user_ratings_total || 0,
           logoUrl: logoUrl || undefined,
           googlePlaceId: place.place_id,
           contactNumber: detailsData.result?.formatted_phone_number || undefined,
-          website: detailsData.result?.website || undefined,
-          latitude: place.geometry?.location?.lat,
-          longitude: place.geometry?.location?.lng,
-          location: (place.geometry?.location?.lng && place.geometry?.location?.lat) ? {
+          website,
+          latitude,
+          longitude,
+          location: (longitude && latitude) ? {
             type: "Point",
-            coordinates: [place.geometry.location.lng, place.geometry.location.lat]
+            coordinates: [longitude, latitude]
           } : undefined
         });
-        
+
         addedCount++;
+        if (gate.autoPublish) publishedCount++; else heldCount++;
+
+        // Enrich straight away from the centre's own website, so subjects,
+        // pricing and announcements are filled in without waiting for an admin
+        // to press "Sync" on each record.
+        //
+        // FAILS SOFT — deliberately: the centre is already saved above, and a
+        // dead link, a timeout or a Gemini outage must not undo that. Any error
+        // is logged and the crawl moves on to the next place.
+        if (website) {
+          try {
+            await syncCentreData(created._id.toString());
+            syncedCount++;
+          } catch (syncError: any) {
+            await SystemLog.create({
+              level: "WARN",
+              source: "AI_SYNC",
+              message: `Auto-sync failed for "${place.name}" (${website}): ${syncError?.message || "unknown error"}. The centre was still saved.`,
+              centreId: created._id,
+              centreName: place.name,
+            }).catch(() => {});
+          }
+        }
       }
     }
 
     await SystemLog.create({
       level: "SUCCESS",
       source: "CRAWLER",
-      message: `Scheduled scrape completed. Added ${addedCount} new centres to Pending Approvals queue.`
+      message:
+        `Scheduled scrape completed. Added ${addedCount} new centres ` +
+        `(${publishedCount} auto-published, ${heldCount} held for review), ` +
+        `${syncedCount} enriched from their own website.`
     });
 
-    return NextResponse.json({ success: true, added: addedCount });
+    return NextResponse.json({
+      success: true,
+      added: addedCount,
+      autoPublished: publishedCount,
+      heldForReview: heldCount,
+      websiteSynced: syncedCount,
+    });
   } catch (error: any) {
     console.error("Cron Error:", error);
     try {

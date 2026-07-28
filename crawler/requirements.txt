@@ -1,6 +1,4 @@
 scrapy
-selenium
 pymongo
 python-dotenv
-pandas
 requests

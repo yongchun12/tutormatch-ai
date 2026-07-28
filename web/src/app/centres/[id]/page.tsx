@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { MapPin, Star, Clock, CheckCircle2, TrendingUp, MessageSquare, ArrowLeft, Heart, ShieldCheck, ThumbsUp, ThumbsDown, Minus, Sparkles, BookOpen, Phone, Globe, Mail, Image as ImageIcon } from "lucide-react";
+import { MapPin, Star, Clock, CheckCircle2, TrendingUp, MessageSquare, ArrowLeft, Heart, ShieldCheck, ThumbsUp, ThumbsDown, Minus, Sparkles, BookOpen, Phone, Globe, Mail, Image as ImageIcon, Megaphone } from "lucide-react";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { Review } from "@/models/Review";
@@ -64,9 +64,14 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
         location: `${rawCentre.city}, ${rawCentre.state}`,
         rating: rawCentre.averageRating || 0,
         reviews: reviewsList.length > 0 ? reviewsList.length : (rawCentre.reviewCount || 0),
-        subjects: rawCentre.subjects,
-        price: rawCentre.priceRange,
-        mode: rawCentre.teachingMode.charAt(0).toUpperCase() + rawCentre.teachingMode.slice(1),
+        // Records written straight to MongoDB by the Python crawler bypass every
+        // Mongoose default, so these can genuinely be missing. Fall back rather
+        // than crash the whole page.
+        subjects: Array.isArray(rawCentre.subjects) ? rawCentre.subjects : [],
+        price: rawCentre.priceRange || "Contact for pricing",
+        mode: rawCentre.teachingMode
+          ? rawCentre.teachingMode.charAt(0).toUpperCase() + rawCentre.teachingMode.slice(1)
+          : "Physical",
         logoUrl: rawCentre.logoUrl || null,
         latitude: rawCentre.latitude,
         longitude: rawCentre.longitude,
@@ -77,6 +82,16 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
         ownerId: rawCentre.ownerId,
         galleryUrls: rawCentre.galleryUrls || [],
         isVerified: rawCentre.isVerified || false,
+        // Newest first. Covers both owner-written announcements and any the AI
+        // sync extracted from the centre's own website.
+        announcements: [...(rawCentre.announcements ?? [])]
+          .filter((a: any) => a?.content)
+          .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .map((a: any) => ({
+            id: a._id?.toString() ?? String(a.date),
+            content: a.content as string,
+            date: new Date(a.date),
+          })),
       };
       
       // Fetch Google Reviews dynamically if available
@@ -216,6 +231,48 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
 
               {/* OVERVIEW TAB */}
               <TabsContent value="overview" className="mt-6 space-y-6">
+                {/* ANNOUNCEMENTS — newest first */}
+                <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="font-heading text-xl flex items-center gap-2">
+                      <Megaphone className="w-5 h-5 text-indigo-500" />
+                      Announcements
+                    </CardTitle>
+                    <CardDescription>Latest news from this centre.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {centre.announcements.length === 0 ? (
+                      <p className="text-slate-500 dark:text-slate-400 text-sm py-2">
+                        This centre has not posted any announcements yet.
+                      </p>
+                    ) : (
+                      <ul className="space-y-4">
+                        {centre.announcements.map((a: { id: string; content: string; date: Date }) => (
+                          <li
+                            key={a.id}
+                            className="relative pl-5 border-l-2 border-indigo-200 dark:border-indigo-800"
+                          >
+                            <span className="absolute -left-[5px] top-1.5 w-2 h-2 rounded-full bg-indigo-500" />
+                            <p className="text-slate-700 dark:text-slate-200 leading-relaxed whitespace-pre-wrap break-words">
+                              {a.content}
+                            </p>
+                            <time
+                              dateTime={a.date.toISOString()}
+                              className="text-xs text-slate-400 mt-1 block"
+                            >
+                              {a.date.toLocaleDateString("en-MY", {
+                                day: "numeric",
+                                month: "long",
+                                year: "numeric",
+                              })}
+                            </time>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </CardContent>
+                </Card>
+
                 <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm">
                   <CardHeader>
                     <CardTitle className="font-heading text-2xl">About this Centre</CardTitle>
@@ -342,19 +399,25 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                      <CardTitle className="font-heading">Subjects Offered</CardTitle>
                    </CardHeader>
                    <CardContent>
-                     <div className="space-y-4">
-                       {centre.subjects.map((sub: string) => (
-                         <div key={sub} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800">
-                           <div className="flex items-center gap-3">
-                             <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400">
-                               <BookOpen className="w-5 h-5" />
+                     {(centre.subjects?.length ?? 0) === 0 ? (
+                       <p className="text-slate-500 dark:text-slate-400 py-4">
+                         This centre has not listed its subjects yet. Contact them directly for details.
+                       </p>
+                     ) : (
+                       <div className="space-y-4">
+                         {(centre.subjects ?? []).map((sub: string) => (
+                           <div key={sub} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800">
+                             <div className="flex items-center gap-3">
+                               <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400">
+                                 <BookOpen className="w-5 h-5" />
+                               </div>
+                               <span className="font-semibold text-slate-900 dark:text-white">{sub}</span>
                              </div>
-                             <span className="font-semibold text-slate-900 dark:text-white">{sub}</span>
+                             <span className="font-bold text-indigo-600 dark:text-indigo-400">{centre.price}</span>
                            </div>
-                           <span className="font-bold text-indigo-600 dark:text-indigo-400">{centre.price}</span>
-                         </div>
-                       ))}
-                     </div>
+                         ))}
+                       </div>
+                     )}
                    </CardContent>
                 </Card>
               </TabsContent>

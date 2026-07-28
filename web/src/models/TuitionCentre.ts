@@ -29,8 +29,12 @@ export interface ITuitionCentre extends Document {
   createdAt: Date;
   updatedAt: Date;
   announcements?: {
+    /** Mongoose gives every subdocument an _id; edit/delete address them by it. */
+    _id: mongoose.Types.ObjectId;
     content: string;
     date: Date;
+    /** "owner" when written from the dashboard, "ai-sync" when extracted from the centre's website. */
+    source?: "owner" | "ai-sync";
   }[];
 }
 
@@ -73,6 +77,10 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
       {
         content: { type: String, required: true },
         date: { type: Date, required: true },
+        // Lets the profile page show where an announcement came from, and lets
+        // the AI sync replace only its own entries without deleting the ones
+        // the owner wrote by hand.
+        source: { type: String, enum: ["owner", "ai-sync"], default: "owner" },
       },
     ],
   },

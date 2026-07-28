@@ -1,9 +1,20 @@
 import os
+import sys
 import requests
 import pymongo
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 import logging
+
+# Reuse the one definition of "what a safe MongoDB document looks like" rather
+# than keeping a second copy in sync by hand.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from crawler.pipelines import (
+    apply_required_defaults,
+    should_auto_publish,
+    log_gate_decision,
+    REQUEST_TIMEOUT,
+)
 
 # ==========================================
 # CAPSTONE INTEGRATION SCRIPT
@@ -113,7 +124,7 @@ def process_pipeline():
                 # Query Google Places API
                 city_query = item.get('city', 'Kuala Lumpur').replace(' ', '+')
                 url = f"https://maps.googleapis.com/maps/api/place/textsearch/json?query={name.replace(' ', '+')}+{city_query}&key={api_key}"
-                resp = requests.get(url).json()
+                resp = requests.get(url, timeout=REQUEST_TIMEOUT).json()
                 
                 if resp.get('status') == 'OK' and len(resp.get('results', [])) > 0:
                     place = resp['results'][0]
@@ -142,16 +153,34 @@ def process_pipeline():
                 logger.error(f"Google API integration failed: {e}")
                 
         # 5. MONGODB INSERTION
+        # pymongo bypasses every Mongoose default and validator, so fill in the
+        # required fields before writing or the Next.js centre page can crash on
+        # a missing `teachingMode` / `subjects`.
+        doc = apply_required_defaults(item)
+
         # Check if it already exists to avoid duplicates
         existing = collection.find_one({"name": name})
         if existing:
-            # Update the existing record with the fresh combined data
-            collection.update_one({"_id": existing["_id"]}, {"$set": dict(item)})
+            # Update the existing record with the fresh combined data. Never
+            # reset the creation time, and never re-decide a status a human has
+            # already set.
+            doc.pop("createdAt", None)
+            doc.pop("status", None)
+            collection.update_one({"_id": existing["_id"]}, {"$set": doc})
             logger.info(f"Updated existing centre in DB: {name}")
         else:
-            # Insert brand new
-            collection.insert_one(dict(item))
-            logger.info(f"Inserted new centre into DB: {name}")
+            # Insert brand new, letting the shared quality gate decide whether it
+            # is published or held for admin review.
+            auto_publish, failed = should_auto_publish(doc)
+            doc["status"] = "approved" if auto_publish else "pending"
+
+            collection.insert_one(doc)
+            log_gate_decision(db, doc, auto_publish, failed, context="Fallback pipeline")
+
+            if auto_publish:
+                logger.info(f"Inserted and auto-published: {name}")
+            else:
+                logger.info(f"Inserted and held for review ({failed[0]}): {name}")
             
     # Clean up connection
     client.close()
