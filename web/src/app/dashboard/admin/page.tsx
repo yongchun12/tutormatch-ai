@@ -14,6 +14,7 @@ import AdminLiveLogs from "@/components/admin/AdminLiveLogs";
 import { ClaimRequest } from "@/models/ClaimRequest";
 import { User } from "@/models/User";
 import { Review } from "@/models/Review";
+import { GateDecision } from "@/models/GateDecision";
 import { approveCentreAction, rejectCentreAction, verifyCentreAction, approveClaimRequestAction, rejectClaimRequestAction } from "./actions";
 import ScrapeButton from "@/components/admin/ScrapeButton";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
@@ -32,6 +33,22 @@ export default async function AdminDashboard() {
   const activeCentresCount = await TuitionCentre.countDocuments({ status: "approved" });
   const totalUsersCount = await User.countDocuments();
   const totalReviewsCount = await Review.countDocuments();
+  // Only reviews the sentiment model actually classified. Counting every review
+  // overstated it: a review stored before classification, or one whose call
+  // failed, has no sentimentScore at all.
+  const analysedReviewsCount = await Review.countDocuments({
+    sentimentScore: { $exists: true, $ne: null },
+  });
+
+  // Real crawler activity, replacing the hardcoded "Active / Next run in 4 hours".
+  const gateDecisionCount = await GateDecision.countDocuments();
+  const latestDecision = await GateDecision.findOne().sort({ createdAt: -1 }).select("createdAt").lean();
+  const lastCrawlLabel = latestDecision?.createdAt
+    ? `Last decision ${new Date(latestDecision.createdAt).toLocaleDateString("en-MY", {
+        day: "numeric",
+        month: "short",
+      })}`
+    : "No crawl has run yet";
   
   // Fetch pending centres scraped by the crawler
   const pendingCentres = await TuitionCentre.find({ status: "pending" }).sort({ createdAt: -1 }).lean();
@@ -91,11 +108,19 @@ export default async function AdminDashboard() {
             <Card className="rounded-2xl border-slate-200 dark:border-slate-800 shadow-sm">
               <CardContent className="p-5">
                 <div className="flex justify-between items-center mb-2">
-                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Reviews Analyzed</p>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Reviews Analysed</p>
                   <BrainCircuit className="w-4 h-4 text-violet-500" />
                 </div>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{totalReviewsCount}</h3>
-                <p className="text-xs text-slate-500 mt-1 font-medium">By FastAPI ML Model</p>
+                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{analysedReviewsCount}</h3>
+                {/*
+                  Was "By FastAPI ML Model" over a count of ALL reviews. There is
+                  no FastAPI service — classification runs in-process in
+                  services/aiService.ts — and reviews with no sentimentScore were
+                  being counted as analysed.
+                */}
+                <p className="text-xs text-slate-500 mt-1 font-medium">
+                  Of {totalReviewsCount} written on TutorMatch
+                </p>
               </CardContent>
             </Card>
 
@@ -110,16 +135,27 @@ export default async function AdminDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="rounded-2xl border-slate-200 dark:border-slate-800 shadow-sm bg-slate-900 text-white dark:bg-slate-800 border-none">
-              <CardContent className="p-5">
-                <div className="flex justify-between items-center mb-2">
-                  <p className="text-sm font-medium text-slate-400">Crawler Status</p>
-                  <Globe className="w-4 h-4 text-emerald-400" />
-                </div>
-                <h3 className="text-2xl font-bold text-white">Active</h3>
-                <p className="text-xs text-emerald-400 mt-1 font-medium">Next run in 4 hours</p>
-              </CardContent>
-            </Card>
+            {/*
+              Was a hardcoded "Active / Next run in 4 hours". Nothing scheduled
+              the crawler on a four-hour cycle and nothing measured its state, so
+              the card asserted a fact the system had no knowledge of. It now
+              reports the gate decisions actually on record, and links to the page
+              that breaks them down.
+            */}
+            <Link href="/dashboard/admin/crawler" className="block">
+              <Card className="rounded-2xl shadow-sm bg-slate-900 text-white dark:bg-slate-800 border-none h-full hover:bg-slate-800 dark:hover:bg-slate-700 transition-colors">
+                <CardContent className="p-5">
+                  <div className="flex justify-between items-center mb-2">
+                    <p className="text-sm font-medium text-slate-400">Gate Decisions</p>
+                    <Globe className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-white">{gateDecisionCount}</h3>
+                  <p className="text-xs text-emerald-400 mt-1 font-medium">
+                    {lastCrawlLabel}
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -310,20 +346,15 @@ export default async function AdminDashboard() {
               </CardContent>
             </Card>
 
-            {/* System Logs */}
-            <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col h-full p-0 gap-0">
-              <CardHeader className="bg-slate-900 border-b border-slate-800 p-4 pb-4">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <CardTitle className="font-heading text-lg text-white flex items-center gap-2">
-                      <Activity className="w-5 h-5 text-indigo-400" /> System Action Logs
-                    </CardTitle>
-                    <CardDescription className="text-slate-400">Live feed from crawlers and core services</CardDescription>
-                  </div>
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                </div>
-              </CardHeader>
-              <CardContent className="p-0 bg-slate-950 flex-1 relative h-64 overflow-hidden">
+            {/*
+              System Logs. The header (and its status indicator) now lives inside
+              AdminLiveLogs: the dot used to be a hardcoded pulsing green circle,
+              which signalled "live and healthy" over an empty feed. SystemLog is
+              capped and only written during a crawl, so empty is its normal
+              resting state.
+            */}
+            <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col h-full p-0 gap-0 min-h-[24rem]">
+              <CardContent className="p-0 flex-1 flex flex-col min-h-0">
                 <AdminLiveLogs
                   initialLogs={systemLogs.map((log: any) => ({
                     id: log._id.toString(),

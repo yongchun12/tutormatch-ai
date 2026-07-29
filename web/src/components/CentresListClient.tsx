@@ -638,10 +638,22 @@ export default function CentresListClient({ initialCentres, savedCentreIds = [] 
                     style={centre.image ? { backgroundImage: `url(${centre.image})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}
                   >
                     <div className="flex flex-col items-start gap-1.5">
+                      {/*
+                        The rating is attributed on the card itself. For a
+                        crawled centre these are Google's aggregates, and an
+                        unlabelled "4.9 (434 reviews)" on a TutorMatch listing
+                        reads as TutorMatch's own score.
+                      */}
                       <Badge className="bg-white/90 text-slate-900 hover:bg-white border-none font-bold shadow-sm backdrop-blur-md">
                         <Star className="w-3.5 h-3.5 text-yellow-500 mr-1 fill-yellow-500" />
                         {centre.rating > 0 || centre.reviews > 0
-                          ? `${Number(centre.rating || 0).toFixed(1)} (${centre.reviews} reviews)`
+                          ? `${Number(centre.rating || 0).toFixed(1)} (${centre.reviews} reviews)${
+                              centre.ratingSource === "google"
+                                ? " · Google"
+                                : centre.ratingSource === "tutormatch"
+                                  ? " · TutorMatch"
+                                  : ""
+                            }`
                           : "New"}
                       </Badge>
                       {centre.isVerified && (

@@ -19,6 +19,39 @@ export default function CentreForm({ initialData }: CentreFormProps) {
   const [message, setMessage] = useState({ type: "", text: "" });
   const [galleryUrls, setGalleryUrls] = useState<string[]>(initialData.galleryUrls || []);
 
+  /**
+   * Every text field is controlled.
+   *
+   * They were uncontrolled with `defaultValue={initialData.<field>}`. Base UI's
+   * FieldControl captures the default on first render, and warns when a later
+   * render supplies a different one ("A component is changing the default value
+   * state of an uncontrolled FieldControl after being initialized").
+   *
+   * That is exactly what happened here: a successful save calls router.refresh(),
+   * the Server Component re-runs, and a brand-new `initialData` arrives with the
+   * saved values — so every field the owner had just edited changed its default.
+   * Fields absent on the record (contactNumber, priceRange, subjects) also went
+   * from `undefined` to a string, which is the same transition.
+   *
+   * `?? ""` matters: a controlled input given `undefined` is treated as
+   * uncontrolled, which would reintroduce the warning from the other direction.
+   */
+  const [fields, setFields] = useState({
+    name: initialData.name ?? "",
+    contactNumber: initialData.contactNumber ?? "",
+    description: initialData.description ?? "",
+    city: initialData.city ?? "",
+    state: initialData.state ?? "",
+    location: initialData.address ?? "",
+    priceRange: initialData.priceRange ?? "",
+    teachingMode: initialData.teachingMode ?? "",
+    subjects: initialData.subjects?.join(", ") ?? "",
+  });
+
+  const setField = (key: keyof typeof fields) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => setFields((prev) => ({ ...prev, [key]: e.target.value }));
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
@@ -30,7 +63,12 @@ export default function CentreForm({ initialData }: CentreFormProps) {
     if (res.error) {
       setMessage({ type: "error", text: res.error });
     } else {
-      setMessage({ type: "success", text: "Centre details updated successfully!" });
+      setMessage({
+        type: "success",
+        text: res.published
+          ? "Centre details saved — your listing is now live in the directory."
+          : "Centre details updated successfully!",
+      });
       router.refresh();
     }
     setLoading(false);
@@ -51,19 +89,21 @@ export default function CentreForm({ initialData }: CentreFormProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Centre Name</label>
-          <Input 
-            name="name" 
-            defaultValue={initialData.name} 
-            required 
+          <Input
+            name="name"
+            value={fields.name}
+            onChange={setField("name")}
+            required
             className="dark:bg-slate-900"
           />
         </div>
 
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Contact Number</label>
-          <Input 
-            name="contactNumber" 
-            defaultValue={initialData.contactNumber} 
+          <Input
+            name="contactNumber"
+            value={fields.contactNumber}
+            onChange={setField("contactNumber")}
             className="dark:bg-slate-900"
           />
         </div>
@@ -72,7 +112,8 @@ export default function CentreForm({ initialData }: CentreFormProps) {
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Description</label>
           <Textarea
             name="description"
-            defaultValue={initialData.description}
+            value={fields.description}
+            onChange={setField("description")}
             rows={4}
             required
             className="dark:bg-slate-900"
@@ -81,9 +122,10 @@ export default function CentreForm({ initialData }: CentreFormProps) {
 
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">City</label>
-          <Input 
-            name="city" 
-            defaultValue={initialData.city} 
+          <Input
+            name="city"
+            value={fields.city}
+            onChange={setField("city")}
             required
             className="dark:bg-slate-900"
           />
@@ -91,9 +133,10 @@ export default function CentreForm({ initialData }: CentreFormProps) {
 
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">State</label>
-          <Input 
-            name="state" 
-            defaultValue={initialData.state} 
+          <Input
+            name="state"
+            value={fields.state}
+            onChange={setField("state")}
             required
             className="dark:bg-slate-900"
           />
@@ -103,7 +146,8 @@ export default function CentreForm({ initialData }: CentreFormProps) {
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Full Address</label>
           <Textarea
             name="location"
-            defaultValue={initialData.address}
+            value={fields.location}
+            onChange={setField("location")}
             rows={2}
             required
             className="dark:bg-slate-900"
@@ -114,7 +158,8 @@ export default function CentreForm({ initialData }: CentreFormProps) {
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Monthly Fee / Price Range</label>
           <Input
             name="priceRange"
-            defaultValue={initialData.priceRange}
+            value={fields.priceRange}
+            onChange={setField("priceRange")}
             placeholder="e.g. RM 150 - RM 300 / month"
             className="dark:bg-slate-900"
           />
@@ -126,7 +171,8 @@ export default function CentreForm({ initialData }: CentreFormProps) {
               silently committed a mode they had never chosen. */}
           <select
             name="teachingMode"
-            defaultValue={initialData.teachingMode || ""}
+            value={fields.teachingMode}
+            onChange={setField("teachingMode")}
             className="flex h-10 w-full rounded-md border border-slate-200 bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-950 dark:border-slate-800 dark:bg-slate-900 dark:text-white dark:focus-visible:ring-slate-300"
           >
             <option value="">Not specified</option>
@@ -138,9 +184,10 @@ export default function CentreForm({ initialData }: CentreFormProps) {
 
         <div className="space-y-2 md:col-span-2">
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Subjects Offered (Comma separated)</label>
-          <Input 
-            name="subjects" 
-            defaultValue={initialData.subjects?.join(", ")} 
+          <Input
+            name="subjects"
+            value={fields.subjects}
+            onChange={setField("subjects")}
             placeholder="e.g. Mathematics, Science, English"
             className="dark:bg-slate-900"
           />

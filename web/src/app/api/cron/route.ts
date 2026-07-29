@@ -146,6 +146,9 @@ export async function GET(request: Request) {
           discoverySource: "google-places",
           averageRating: place.rating || 0,
           reviewCount: place.user_ratings_total || 0,
+          // These are GOOGLE's aggregates, not TutorMatch's. Recorded so the UI
+          // can attribute the star rating to the platform it came from.
+          ratingSource: place.rating ? "google" : undefined,
           logoUrl: logoUrl || undefined,
           googlePlaceId: place.place_id,
           contactNumber: detailsData.result?.formatted_phone_number || undefined,

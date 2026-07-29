@@ -5,14 +5,26 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import { Eye, EyeOff } from "lucide-react";
+import { AuthNotice, FieldError, inputClass } from "@/components/auth/AuthFeedback";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  /**
+   * Bad credentials are reported next to the password box rather than in a
+   * banner at the top of the card. NextAuth cannot tell us which of the two was
+   * wrong — and saying so would confirm to a stranger whether an email is
+   * registered — so one message covers both, anchored to the field the user will
+   * actually retype. Neither field is ever cleared.
+   */
+  const [credentialsError, setCredentialsError] = useState("");
+  /** Page-level state that belongs to no single field. */
+  const [notice, setNotice] = useState<{ tone: "error" | "success" | "info"; title?: string; text: string } | null>(null);
   const [needsVerification, setNeedsVerification] = useState(false);
-  const [notice, setNotice] = useState("");
   const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
 
   // Show a status banner based on the query flag set by the verify / reset flows.
@@ -20,25 +32,63 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     const verify = params.get("verify");
     const reset = params.get("reset");
-    if (verify === "success") setNotice("Your email is verified — you can now sign in.");
-    else if (verify === "invalid") setError("That activation link is invalid or has expired. Try resending it below.");
-    else if (verify === "error") setError("We couldn't verify your email. Please try again.");
-    else if (reset === "success") setNotice("Your password has been updated — please sign in.");
+    if (verify === "success") {
+      setNotice({ tone: "success", text: "Your email is verified — you can now sign in." });
+    } else if (verify === "invalid") {
+      setNotice({
+        tone: "info",
+        title: "That activation link has expired",
+        text: "Activation links last 24 hours. Enter your email below and we'll send a fresh one.",
+      });
+      setNeedsVerification(true);
+    } else if (verify === "error") {
+      setNotice({
+        tone: "error",
+        title: "We couldn't verify your email",
+        text: "Something went wrong on our side. Please try the link again in a moment.",
+      });
+    } else if (reset === "success") {
+      setNotice({ tone: "success", text: "Your password has been updated — please sign in." });
+    }
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setCredentialsError("");
+    setNotice(null);
     setNeedsVerification(false);
+    setSubmitting(true);
 
-    const res = await signIn("credentials", { email, password, redirect: false });
+    let res;
+    try {
+      res = await signIn("credentials", { email, password, redirect: false });
+    } catch {
+      // Network failure, not a rejected login. Say so plainly instead of
+      // blaming the user's password.
+      setSubmitting(false);
+      setNotice({
+        tone: "error",
+        title: "We couldn't reach the server",
+        text: "Check your internet connection and try again.",
+      });
+      return;
+    }
 
     if (res?.error) {
+      setSubmitting(false);
+      // `res.error` is a NextAuth code such as "CredentialsSignin" — never put
+      // it on screen.
       if (res.error.includes("EMAIL_NOT_VERIFIED")) {
         setNeedsVerification(true);
-        setError("Your email isn't verified yet. Please activate your account.");
+        setNotice({
+          tone: "info",
+          title: "Your account isn't activated yet",
+          text: "We sent an activation link when you signed up. Click it to finish setting up your account, or request a new one below.",
+        });
       } else {
-        setError("Invalid email or password.");
+        setCredentialsError(
+          "That email and password don't match. Check for typos — passwords are case-sensitive."
+        );
       }
       return;
     }
@@ -78,14 +128,8 @@ export default function LoginPage() {
         </div>
 
         {notice && (
-          <div className="mb-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50 p-3 text-sm text-emerald-700 dark:text-emerald-400">
-            {notice}
-          </div>
-        )}
-
-        {error && (
-          <div className="mb-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/50 p-3 text-sm text-red-600 dark:text-red-400">
-            {error}
+          <AuthNotice tone={notice.tone} title={notice.title}>
+            {notice.text}
             {needsVerification && (
               <div className="mt-2">
                 {resendState === "sent" ? (
@@ -96,46 +140,94 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={handleResend}
-                    disabled={resendState === "sending"}
-                    className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-60"
+                    disabled={resendState === "sending" || !email.trim()}
+                    className="font-medium text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-60 disabled:no-underline"
                   >
-                    {resendState === "sending" ? "Sending…" : "Resend activation email"}
+                    {resendState === "sending"
+                      ? "Sending…"
+                      : email.trim()
+                        ? "Resend activation email"
+                        : "Enter your email above to resend the link"}
                   </button>
                 )}
               </div>
             )}
-          </div>
+          </AuthNotice>
         )}
 
-        <form className="space-y-4" onSubmit={handleLogin}>
+        <form className="space-y-4" onSubmit={handleLogin} noValidate>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email Address</label>
+            <label htmlFor="login-email" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Email Address
+            </label>
             <input
+              id="login-email"
               type="email"
+              autoComplete="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white"
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (credentialsError) setCredentialsError("");
+              }}
+              aria-invalid={credentialsError ? true : undefined}
+              className={inputClass(Boolean(credentialsError))}
               placeholder="you@example.com"
               required
             />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Password</label>
+              <label htmlFor="login-password" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                Password
+              </label>
               <Link href="/auth/forgot-password" className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">Forgot password?</Link>
             </div>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white"
-              placeholder="••••••••"
-              required
-            />
+            <div className="relative">
+              <input
+                id="login-password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (credentialsError) setCredentialsError("");
+                }}
+                aria-invalid={credentialsError ? true : undefined}
+                aria-describedby={credentialsError ? "login-password-error" : undefined}
+                className={inputClass(Boolean(credentialsError), "pr-12")}
+                placeholder="••••••••"
+                required
+              />
+              {/* A typo is the commonest cause of this error, so let the user
+                  check what they typed rather than retype it blind. */}
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-indigo-500 dark:text-slate-500 dark:hover:text-indigo-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            <FieldError id="login-password-error">
+              {credentialsError && (
+                <>
+                  {credentialsError}{" "}
+                  <Link href="/auth/forgot-password" className="underline font-medium">
+                    Reset your password
+                  </Link>{" "}
+                  if you&apos;ve forgotten it.
+                </>
+              )}
+            </FieldError>
           </div>
 
-          <Button type="submit" className="w-full py-6 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md text-base mt-4">
-            Sign In
+          <Button
+            type="submit"
+            disabled={submitting}
+            className="w-full py-6 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md text-base mt-4"
+          >
+            {submitting ? "Signing in…" : "Sign In"}
           </Button>
         </form>
 

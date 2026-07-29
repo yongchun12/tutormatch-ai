@@ -23,7 +23,7 @@ export async function submitReviewAction(formData: FormData) {
 
         await dbConnect();
 
-        // Call the Python AI Microservice for Sentiment Scoring
+        // Classify the sentiment in-process (see services/aiService.ts).
         const sentimentResult = await aiService.analyzeSentiment(comment);
         const score = sentimentResult ? sentimentResult.score : "neutral";
 
@@ -33,10 +33,15 @@ export async function submitReviewAction(formData: FormData) {
             centreId: centreId,
             rating: rating,
             comment: comment,
-            sentimentScore: score
+            sentimentScore: score,
+            // Written through this form, by a signed-in TutorMatch account.
+            // Recorded explicitly so the centre page can tell it apart from a
+            // review pulled in from Google Places.
+            source: "tutormatch",
         });
 
-        // Update the averageRating and reviewCount of the TuitionCentre
+        // Update the TutorMatch rating (and the headline, only if Google has not
+        // supplied one — see lib/review-helpers.ts).
         const { recalculateCentreRating } = await import("@/lib/review-helpers");
         await recalculateCentreRating(centreId);
 

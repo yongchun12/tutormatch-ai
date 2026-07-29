@@ -4,6 +4,7 @@ import dbConnect from "@/lib/db";
 import { User } from "@/models/User";
 import { generateToken, VERIFICATION_TOKEN_TTL_MS } from "@/lib/tokens";
 import { sendVerificationEmail } from "@/lib/email";
+import { validatePassword } from "@/lib/password";
 
 export async function POST(req: Request) {
   try {
@@ -11,6 +12,15 @@ export async function POST(req: Request) {
 
     if (!name || !email || !password) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    // Enforced here, not just in the browser: the sign-up form used to apply no
+    // length rule at all, while the reset route required six characters — so the
+    // same account was held to two different policies depending on how its
+    // password was set.
+    const passwordProblem = validatePassword(password);
+    if (passwordProblem) {
+      return NextResponse.json({ error: passwordProblem }, { status: 400 });
     }
 
     // Only self-service roles may be chosen at registration. "admin" can never

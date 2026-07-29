@@ -36,6 +36,15 @@ export interface IGateDecision extends Document {
   centreId?: mongoose.Types.ObjectId;
   /** Name captured at decision time, so the log stays readable after renames. */
   centreName: string;
+  /**
+   * For a re-gate (context "admin-regate"): the decision this one revises.
+   *
+   * A re-gate APPENDS rather than editing. The superseded row stays exactly as
+   * written, so "what the gate decided when it ran" and "what today's rules
+   * decide" are both answerable — reporting one as the other is the specific
+   * failure this field exists to prevent.
+   */
+  supersedes?: mongoose.Types.ObjectId;
   createdAt: Date;
 }
 
@@ -54,6 +63,7 @@ const GateDecisionSchema: Schema<IGateDecision> = new Schema(
     enrichmentReasons: [{ type: String }],
     centreId: { type: Schema.Types.ObjectId, ref: "TuitionCentre" },
     centreName: { type: String, required: true },
+    supersedes: { type: Schema.Types.ObjectId, ref: "GateDecision" },
     createdAt: { type: Date, default: Date.now },
   },
   { timestamps: false }

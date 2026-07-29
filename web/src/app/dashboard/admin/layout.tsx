@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { ShieldCheck, Activity, Database, Users, BrainCircuit, Globe, Star } from "lucide-react";
+import { ShieldCheck, Activity, Database, Users, Globe, Star } from "lucide-react";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
 
 export default async function AdminLayout({
@@ -39,11 +39,13 @@ export default async function AdminLayout({
           <Link href="/dashboard/admin/users" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
             <Users className="w-5 h-5" /> User Accounts
           </Link>
-          <Link href="/dashboard/admin/ai" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
-            <BrainCircuit className="w-5 h-5" /> AI Engine Status
-          </Link>
-          <Link href="/dashboard/admin/scraper" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
-            <Globe className="w-5 h-5" /> Web Scraper Logs
+          {/*
+            One entry, replacing "AI Engine Status" and "Web Scraper Logs".
+            Both of those rendered hardcoded metrics and invented log lines, and
+            described a FastAPI microservice this system does not run.
+          */}
+          <Link href="/dashboard/admin/crawler" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
+            <Globe className="w-5 h-5" /> Crawler &amp; Gate Activity
           </Link>
           <Link href="/dashboard/admin/reviews" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
             <Star className="w-5 h-5" /> Moderation (Reviews)

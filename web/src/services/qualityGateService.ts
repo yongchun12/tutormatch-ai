@@ -1,5 +1,6 @@
 import type mongoose from "mongoose";
 import { GateDecision } from "@/models/GateDecision";
+import { TuitionCentre } from "@/models/TuitionCentre";
 import {
   shouldAutoPublish,
   enrichmentReasons as computeEnrichmentReasons,
@@ -9,6 +10,7 @@ import {
   type GateCriterion,
   type EnrichmentReason,
   CRITERION_LABELS,
+  ENRICHMENT_LABELS,
   PENDING_CRITERIA,
 } from "@/lib/quality-gate";
 
@@ -179,4 +181,65 @@ export async function getQualityGateStats(): Promise<GateStats> {
     })),
     notYetActive: [...PENDING_CRITERIA],
   };
+}
+
+/** How many published listings are still incomplete, and in what way. */
+export interface EnrichmentStats {
+  /** Centres with needsEnrichment set, excluding rejected ones. */
+  total: number;
+  /** How many are short of each thing. A centre can appear in more than one. */
+  byReason: Array<{ reason: EnrichmentReason; label: string; count: number }>;
+}
+
+/**
+ * Count incomplete listings from the centres themselves, not from GateDecision.
+ *
+ * GateDecision records what was true at the moment a record was crawled; it is
+ * an audit trail and never updated afterwards. A centre whose subjects were
+ * filled in later still has its original "no-subjects" decision on file. Only
+ * the live collection can answer "what is still missing right now", which is
+ * what an admin queue needs.
+ */
+export async function getEnrichmentStats(): Promise<EnrichmentStats> {
+  const notRejected = { needsEnrichment: true, status: { $ne: "rejected" } } as const;
+
+  const [total, noSubjects, noCoordinates, notConfirmed] = await Promise.all([
+    TuitionCentre.countDocuments(notRejected),
+    TuitionCentre.countDocuments({
+      ...notRejected,
+      $or: [{ subjects: { $exists: false } }, { subjects: { $size: 0 } }],
+    }),
+    TuitionCentre.countDocuments({
+      ...notRejected,
+      $or: [
+        { latitude: { $in: [null, undefined] } },
+        { longitude: { $in: [null, undefined] } },
+      ],
+    }),
+    TuitionCentre.countDocuments({
+      ...notRejected,
+      $and: [
+        {
+          $or: [
+            { googlePlaceId: { $exists: false } },
+            { googlePlaceId: null },
+            { googlePlaceId: "" },
+          ],
+        },
+        { discoverySource: { $ne: "google-places" } },
+      ],
+    }),
+  ]);
+
+  const byReason: EnrichmentStats["byReason"] = (
+    [
+      ["no-subjects", noSubjects],
+      ["no-coordinates", noCoordinates],
+      ["not-confirmed-by-google", notConfirmed],
+    ] as Array<[EnrichmentReason, number]>
+  )
+    .map(([reason, count]) => ({ reason, label: ENRICHMENT_LABELS[reason], count }))
+    .sort((a, b) => b.count - a.count);
+
+  return { total, byReason };
 }

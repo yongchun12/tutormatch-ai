@@ -146,6 +146,7 @@ export async function GET(req: NextRequest) {
         // Merge/Update coordinates and rating if missing or outdated
         existing.averageRating = place.rating || existing.averageRating;
         existing.reviewCount = place.user_ratings_total || existing.reviewCount;
+        if (place.rating) existing.ratingSource = "google";
         existing.latitude = place.geometry?.location?.lat || existing.latitude;
         existing.longitude = place.geometry?.location?.lng || existing.longitude;
         if (existing.latitude && existing.longitude) {
@@ -224,6 +225,7 @@ export async function GET(req: NextRequest) {
           discoverySource: "google-places",
           averageRating: place.rating || 0,
           reviewCount: place.user_ratings_total || 0,
+          ratingSource: place.rating ? "google" : undefined,
           logoUrl: logoUrl || undefined,
           googlePlaceId: place.place_id,
           latitude: place.geometry?.location?.lat,

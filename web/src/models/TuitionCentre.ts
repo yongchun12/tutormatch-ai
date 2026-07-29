@@ -23,8 +23,34 @@ export interface ITuitionCentre extends Document {
   contactNumber?: string;
   website?: string;
   email?: string;
+  /**
+   * The HEADLINE rating shown on cards and the centre hero, and the value the
+   * recommender and every "sort by rating" query read.
+   *
+   * For a crawled centre this is Google's aggregate — `place.rating` from the
+   * Places API — covering reviews written on Google, not on TutorMatch.
+   * `ratingSource` records which platform it came from; nothing should render
+   * this number without also rendering that attribution.
+   */
   averageRating: number;
   reviewCount: number;
+  /**
+   * Which platform `averageRating`/`reviewCount` describe. Absent means the
+   * centre has never been rated on either platform.
+   */
+  ratingSource?: "google" | "tutormatch";
+  /**
+   * Ratings from reviews written ON TutorMatch, kept separate so they can be
+   * shown next to the Google figure rather than silently replacing it.
+   *
+   * They used to share `averageRating`: submitting a review called
+   * recalculateCentreRating(), which overwrote Google's "4.9 from 434 reviews"
+   * with the average of however many TutorMatch reviews existed — so two
+   * five-star reviews could rewrite a centre's public rating, and the Google
+   * figure was destroyed with no way to tell it had ever been there.
+   */
+  tutorMatchRating?: number;
+  tutorMatchReviewCount?: number;
   googlePlaceId?: string;
   isVerified?: boolean;
   /**
@@ -86,6 +112,9 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
     email: { type: String },
     averageRating: { type: Number, default: 0 },
     reviewCount: { type: Number, default: 0 },
+    ratingSource: { type: String, enum: ["google", "tutormatch"] },
+    tutorMatchRating: { type: Number, default: 0 },
+    tutorMatchReviewCount: { type: Number, default: 0 },
     googlePlaceId: { type: String },
     isVerified: { type: Boolean, default: false },
     needsEnrichment: { type: Boolean, default: false },

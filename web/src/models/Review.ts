@@ -1,23 +1,58 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 
+/** Which platform a review was written on. See ReviewSource below. */
+export type ReviewSource = "tutormatch" | "google";
+
 export interface IReview extends Document {
-  userId: mongoose.Types.ObjectId;
+  /** Absent for Google reviews — they were not written by a TutorMatch account. */
+  userId?: mongoose.Types.ObjectId;
   centreId: mongoose.Types.ObjectId;
   rating: number;
   comment: string;
   sentimentScore: "positive" | "neutral" | "negative";
   confidence: number;
+  /**
+   * Where the review came from.
+   *
+   * Every stored review used to be implicitly a TutorMatch one, because `userId`
+   * was required — while the headline star rating and review count shown next to
+   * them came from Google Places. A centre could therefore display "4.9 from 434
+   * reviews" (Google) above a Reviews tab holding two TutorMatch reviews, with
+   * nothing on screen saying the two numbers measured different things.
+   *
+   * Existing rows have no `source`, so the default backfills them correctly:
+   * anything already in the collection was necessarily written on TutorMatch.
+   */
+  source: ReviewSource;
+  /** Display name for a Google review, whose author has no TutorMatch account. */
+  authorName?: string;
   createdAt: Date;
 }
 
 const ReviewSchema: Schema<IReview> = new Schema(
   {
-    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    // Conditionally required. A Google-sourced review has no TutorMatch author,
+    // but relaxing this outright would let an anonymous TutorMatch review be
+    // written — so the requirement is kept for exactly the case it applies to.
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: function (this: IReview) {
+        return this.source === "tutormatch";
+      },
+    },
     centreId: { type: Schema.Types.ObjectId, ref: "TuitionCentre", required: true },
     rating: { type: Number, required: true, min: 1, max: 5 },
     comment: { type: String, required: true },
     sentimentScore: { type: String, enum: ["positive", "neutral", "negative"] },
     confidence: { type: Number },
+    source: {
+      type: String,
+      enum: ["tutormatch", "google"],
+      required: true,
+      default: "tutormatch",
+    },
+    authorName: { type: String },
   },
   { timestamps: true }
 );

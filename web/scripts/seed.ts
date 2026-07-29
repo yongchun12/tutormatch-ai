@@ -3,6 +3,7 @@ import * as dotenv from "dotenv";
 import { User } from "../src/models/User";
 import { TuitionCentre } from "../src/models/TuitionCentre";
 import { Review } from "../src/models/Review";
+import { recalculateCentreRating } from "../src/lib/review-helpers";
 import bcrypt from "bcryptjs";
 
 // Load environment variables from .env.local
@@ -65,8 +66,15 @@ const seedData = async () => {
       priceRange: "RM 250/mo",
       teachingMode: "hybrid",
       status: "approved",
-      averageRating: 4.9,
-      reviewCount: 48,
+      // Zero, and left that way deliberately. This used to seed "4.9 from 48
+      // reviews" — a figure invented for the fixture, which the directory then
+      // displayed as though 48 people had rated the centre. Ratings are only
+      // ever written from a real source now: Google Places (ratingSource:
+      // "google") or reviews actually left on TutorMatch. The Wilson lower
+      // bound is demonstrated on crawled businesses instead — Quantum Academy
+      // (5.0 from 1) against Pusat Tuisyen Seri Amal (4.9 from 98).
+      averageRating: 0,
+      reviewCount: 0,
       // Petaling Jaya - close to the student and a strong subject match.
       latitude: 3.1073,
       longitude: 101.6067,
@@ -84,8 +92,9 @@ const seedData = async () => {
       priceRange: "RM 180/mo",
       teachingMode: "physical",
       status: "approved",
-      averageRating: 4.7,
-      reviewCount: 35,
+      // Was "4.7 from 35 reviews". See the note on centre1.
+      averageRating: 0,
+      reviewCount: 0,
       // Subang Jaya - nearest, but weaker subject match for this student.
       latitude: 3.0438,
       longitude: 101.5808,
@@ -103,10 +112,12 @@ const seedData = async () => {
       priceRange: "RM 300/mo",
       teachingMode: "physical",
       status: "approved",
-      averageRating: 5.0,
-      // Perfect subjects and a perfect average, but only 3 reviews - the
-      // Wilson adjustment should stop this newcomer from topping the ranking.
-      reviewCount: 3,
+      // Was "5.0 from 3 reviews", written to demonstrate that the Wilson
+      // adjustment stops a newcomer with a perfect average from topping the
+      // ranking. That demonstration now rests on crawled data rather than on a
+      // fixture built to produce the result — see the note on centre1.
+      averageRating: 0,
+      reviewCount: 0,
       // Kuala Lumpur - farther from the student.
       latitude: 3.1579,
       longitude: 101.7120,
@@ -131,6 +142,13 @@ const seedData = async () => {
       sentimentScore: "neutral",
       confidence: 0.75
     });
+
+    // Derive centre1's headline rating from the two reviews just created,
+    // rather than stating a number alongside them. The fixture used to declare
+    // "4.9 from 48 reviews" above these same two reviews; this makes the
+    // headline and the Reviews tab agree by construction, and stamps
+    // ratingSource so the page can attribute it.
+    await recalculateCentreRating(centre1._id.toString());
 
     console.log("✅ Seeding completed successfully!");
     process.exit(0);

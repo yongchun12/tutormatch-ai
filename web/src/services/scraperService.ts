@@ -136,6 +136,7 @@ export async function discoverAndSyncCentres(
     if (existing) {
       existing.averageRating = place.rating ?? existing.averageRating;
       existing.reviewCount = place.user_ratings_total ?? existing.reviewCount;
+      if (place.rating != null) existing.ratingSource = "google";
       if (!existing.googlePlaceId && place.place_id) existing.googlePlaceId = place.place_id;
       if (lat) existing.latitude = lat;
       if (lng) existing.longitude = lng;
@@ -180,6 +181,7 @@ export async function discoverAndSyncCentres(
         discoverySource: "google-places",
         averageRating: place.rating || 0,
         reviewCount: place.user_ratings_total || 0,
+        ratingSource: place.rating ? "google" : undefined,
         logoUrl,
         googlePlaceId: place.place_id,
         latitude: lat,
@@ -309,7 +311,8 @@ export async function scrapeLocation(locationQuery: string) {
                     needsEnrichment: gate.needsEnrichment,
                     discoverySource: "google-places",
                     averageRating: rating,
-                    reviewCount: reviewCount, 
+                    reviewCount: reviewCount,
+                    ratingSource: rating ? "google" : undefined,
                     logoUrl: logoUrl,
                     googlePlaceId: place.place_id,
                     website: website,
@@ -322,6 +325,7 @@ export async function scrapeLocation(locationQuery: string) {
             } else {
                 existing.averageRating = rating;
                 existing.reviewCount = reviewCount;
+                if (rating) existing.ratingSource = "google";
                 if (website && !existing.website) existing.website = website;
                 if (contactNumber && !existing.contactNumber) existing.contactNumber = contactNumber;
                 if (logoUrl) {

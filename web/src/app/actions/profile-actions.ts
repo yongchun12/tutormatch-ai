@@ -22,8 +22,19 @@ export async function updateUserProfileAction(formData: FormData) {
         throw new Error("User not found");
     }
 
-    user.name = name || user.name;
-    user.email = email || user.email;
+    const nextEmail = (email || user.email).trim().toLowerCase();
+
+    // `email` carries a unique index, so saving a taken address would surface a
+    // raw "E11000 duplicate key" to the user. Check first and say it plainly.
+    if (nextEmail !== user.email.toLowerCase()) {
+        const taken = await User.exists({ _id: { $ne: user._id }, email: nextEmail });
+        if (taken) {
+            throw new Error("That email address is already used by another account.");
+        }
+    }
+
+    user.name = name?.trim() || user.name;
+    user.email = nextEmail;
 
     if (currentPassword && newPassword) {
         const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);

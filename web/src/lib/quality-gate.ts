@@ -236,52 +236,22 @@ export function shouldAutoPublish(centre: GateInput): GateResult {
     (waived ? waivedCriteria : failedCriteria).push(criterion);
   };
 
-  // 1. Confirmed by Google Places, not a website-only scrape.
-  //    Waived for directory records — an admin cannot make Google list a centre.
   if (!isFromGooglePlaces(centre)) {
     fail("not-from-google-places");
   }
 
-  // 2. Both coordinates present, so distance ranking and the map work.
-  //    Waived for directory records — an admin cannot supply coordinates, and a
-  //    centre with a real address is still findable and contactable without a
-  //    map pin. Roughly half of one 201-centre crawl had its Google match
-  //    refused by the confidence check, so enforcing this held them all.
   if (!isValidCoordinate(centre.latitude) || !isValidCoordinate(centre.longitude)) {
     fail("missing-coordinates");
   }
 
-  // 3. A real address, not the "Address not provided" placeholder.
-  //    NOT waived for anyone: an address is the one thing a reviewer really can
-  //    chase up, and without it the listing is of no use to a student.
   if (!hasUsableAddress(centre.address)) {
     fail("missing-address");
   }
 
-  // 4. The name identifies it as a tuition/learning centre.
-  //
-  // Skipped for records from a curated tuition directory: being listed on one
-  // already establishes that the business is a tuition centre, so the name is
-  // not needed as a proxy for it. The check stays live for Google Places
-  // results, where it is what keeps malls and convention centres out.
-  //
-  // Measured on real data: 8 of 20 centres on one directory page (40%) have
-  // names with no keyword at all — "EXCEL IN MATHS", "Pasxcel", "Co Learn" —
-  // so applying it to a trusted source would hold most of a legitimate crawl.
   if (!fromDirectory && !hasTuitionKeyword(centre.name)) {
     fail("name-not-tuition-related");
   }
 
-  // Missing subjects is deliberately NOT a gate criterion. Holding a record
-  // only helps if a human can resolve it: an admin can judge whether something
-  // really is a tuition centre, but has no way to know which subjects it
-  // teaches. Since Google Places rarely states subjects, making it a gate rule
-  // held nearly every record for a review that could not answer the question.
-  // It is tracked separately by `needsEnrichment` below, which routes the
-  // record to enrichment (a website sync, or an owner filling it in) instead of
-  // to a reviewer who cannot help.
-
-  // 5. Phase 4 criteria — evaluated, then filtered out while still pending.
   for (const criterion of evaluatePendingCriteria(centre)) {
     if (!PENDING_CRITERIA.includes(criterion)) {
       fail(criterion);

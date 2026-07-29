@@ -13,6 +13,7 @@ import { Review } from "@/models/Review";
 import { User } from "@/models/User";
 import ReviewForm from "@/components/ReviewForm";
 import ReviewsClient from "@/components/ReviewsClient";
+import GalleryLightbox from "@/components/GalleryLightbox";
 import EnquiryForm from "@/components/EnquiryForm";
 import SaveCentreButton from "@/components/SaveCentreButton";
 import ClaimCentreButtonWrapper from "@/components/ClaimCentreButtonWrapper";
@@ -35,7 +36,17 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
   }
 
   let centre = null;
-  let reviewsList: { id: string; name: string; score: string; text: string; rating: number; }[] = [];
+  let reviewsList: {
+    id: string;
+    name: string;
+    score: string;
+    text: string;
+    rating: number;
+    /** Which platform this review was written on. Rendered on every card. */
+    source: "tutormatch" | "google";
+    /** True only when OUR sentiment model actually classified this review. */
+    analysed: boolean;
+  }[] = [];
   let aiSummary = { pos: 0, neu: 0, neg: 0, total: 0 };
 
   try {
@@ -45,17 +56,21 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
     } catch (e) {
       return notFound();
     }
-    
+
     if (rawCentre) {
       // Fetch actual reviews from DB for this centre
       const rawReviews = await Review.find({ centreId: resolvedParams.id }).sort({ createdAt: -1 }).populate("userId", "name").lean();
-      
+
       reviewsList = rawReviews.map((r: any) => ({
         id: r._id.toString(),
-        name: r.userId ? r.userId.name : "Student User",
+        name: r.userId ? r.userId.name : r.authorName || "Student User",
         score: r.sentimentScore || "neutral",
         text: r.comment,
-        rating: r.rating
+        rating: r.rating,
+        // Rows written before the source field existed were necessarily ours:
+        // userId used to be required.
+        source: r.source === "google" ? "google" : "tutormatch",
+        analysed: Boolean(r.sentimentScore),
       }));
 
       centre = {
@@ -65,6 +80,11 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
         location: formatLocation(rawCentre.city, rawCentre.state),
         rating: rawCentre.averageRating || 0,
         reviews: reviewsList.length > 0 ? reviewsList.length : (rawCentre.reviewCount || 0),
+        // Which platform the headline star rating belongs to. Never rendered
+        // without this.
+        ratingSource: rawCentre.ratingSource,
+        tutorMatchRating: rawCentre.tutorMatchRating || 0,
+        tutorMatchReviewCount: rawCentre.tutorMatchReviewCount || 0,
         // Records written straight to MongoDB by the Python crawler bypass every
         // Mongoose default, so these can genuinely be missing. Fall back rather
         // than crash the whole page.
@@ -115,18 +135,27 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
               
               // Real-time fallback for review count
               const liveReviewCount = data.result.user_ratings_total || 0;
+              if (typeof data.result.rating === "number") {
+                centre.rating = data.result.rating;
+                centre.ratingSource = "google";
+              }
 
               if (data.result.reviews) {
                 const googleReviews = data.result.reviews.map((r: any) => ({
                   id: `google-${r.time}`,
                   name: r.author_name || "Google User",
+                  // A crude rating threshold, NOT our sentiment model. Flagged
+                  // `analysed: false` so it is excluded from the model's stats
+                  // below and labelled honestly on the card.
                   score: r.rating >= 4 ? "positive" : (r.rating <= 2 ? "negative" : "neutral"),
                   text: r.text,
-                  rating: r.rating
+                  rating: r.rating,
+                  source: "google" as const,
+                  analysed: false,
                 }));
                 reviewsList = [...reviewsList, ...googleReviews];
               }
-              
+
               // Ensure we display the maximum known review count
               centre.reviews = Math.max(reviewsList.length, rawCentre.reviewCount || 0, liveReviewCount);
             }
@@ -136,15 +165,25 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
         }
       }
 
-      // If we have real reviews, recalculate the AI summary percentages dynamically!
-      if (reviewsList.length > 0) {
+      /*
+        Sentiment summary — counted ONLY over reviews our model actually scored.
+
+        This used to run over the merged list, Google reviews included. Those
+        carry no model output at all: their "sentiment" is the `rating >= 4`
+        threshold a few lines above. So a centre with 2 TutorMatch reviews and 5
+        Google ones reported "Our ML model processed 7 student reviews", of
+        which it had in fact processed 2 — a claim about the system's own
+        behaviour that was not true.
+      */
+      const analysedReviews = reviewsList.filter((r) => r.analysed);
+      if (analysedReviews.length > 0) {
         let pos = 0; let neu = 0; let neg = 0;
-        reviewsList.forEach(r => {
+        analysedReviews.forEach(r => {
           if (r.score === 'positive') pos++;
           else if (r.score === 'negative') neg++;
           else neu++;
         });
-        const total = reviewsList.length;
+        const total = analysedReviews.length;
         aiSummary = {
           pos: Math.round((pos / total) * 100),
           neu: Math.round((neu / total) * 100),
@@ -190,8 +229,23 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
     }
 
     if (centre.reviews > 0) {
+      // Named, not just stated: the number is Google's for almost every crawled
+      // centre, and "4.9★ from 434 reviews" with no attribution reads as though
+      // TutorMatch collected them.
+      const platform =
+        centre.ratingSource === "google"
+          ? "on Google"
+          : centre.ratingSource === "tutormatch"
+            ? "on TutorMatch"
+            : "";
       keyFacts.push(
-        `${centre.rating.toFixed(1)}★ from ${centre.reviews} review${centre.reviews === 1 ? "" : "s"}`
+        `${centre.rating.toFixed(1)}★ from ${centre.reviews} review${centre.reviews === 1 ? "" : "s"}${platform ? ` ${platform}` : ""}`
+      );
+    }
+
+    if (centre.tutorMatchReviewCount > 0 && centre.ratingSource === "google") {
+      keyFacts.push(
+        `${centre.tutorMatchRating.toFixed(1)}★ from ${centre.tutorMatchReviewCount} TutorMatch review${centre.tutorMatchReviewCount === 1 ? "" : "s"}`
       );
     }
 
@@ -242,6 +296,13 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                     rather than an absence of data, so say "No reviews yet"
                     instead — matching how the directory cards show "New".
                   */}
+                  {/*
+                    The star rating is attributed inline. For a crawled centre
+                    this figure is Google's aggregate over reviews written on
+                    Google Maps — showing it bare, directly above a Reviews tab
+                    holding TutorMatch reviews, presented one platform's score as
+                    if it were the other's.
+                  */}
                   {centre.reviews > 0 ? (
                     <>
                       <Star className="w-4 h-4 text-yellow-400 fill-yellow-400 mr-1" />
@@ -249,6 +310,11 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                       <span className="ml-1 text-slate-300">
                         ({centre.reviews} review{centre.reviews === 1 ? "" : "s"})
                       </span>
+                      {centre.ratingSource && (
+                        <Badge className="ml-2 bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-none text-[11px] font-medium">
+                          {centre.ratingSource === "google" ? "from Google" : "from TutorMatch"}
+                        </Badge>
+                      )}
                     </>
                   ) : (
                     <>
@@ -381,19 +447,10 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                       <CardDescription>Take a look inside the centre</CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                        {centre.galleryUrls.map((url: string, idx: number) => (
-                          <div key={idx} className="relative aspect-video sm:aspect-square md:aspect-video rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img 
-                              src={url} 
-                              alt={`Gallery photo ${idx + 1}`} 
-                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
-                            />
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                          </div>
-                        ))}
-                      </div>
+                      <GalleryLightbox
+                        urls={centre.galleryUrls}
+                        centreName={centre.name}
+                      />
                     </CardContent>
                   </Card>
                 </TabsContent>
@@ -412,13 +469,26 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                     </div>
                     <CardTitle className="font-heading text-2xl">Sentiment Analysis Summary</CardTitle>
                     <CardDescription>
-                      Our ML model processed {aiSummary.total} student reviews to bring you the truth about this centre.
+                      {/*
+                        States the exact denominator. The old copy said "processed
+                        {reviewsList.length} student reviews" while the summary was
+                        computed over Google reviews too, which the model never sees.
+                      */}
+                      Based on the {aiSummary.total} review{aiSummary.total === 1 ? "" : "s"} written on
+                      TutorMatch that our sentiment model has classified.
+                      {reviewsList.length > aiSummary.total && (
+                        <> Google reviews shown below are not included — we don&apos;t run our model on them.</>
+                      )}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="relative z-10">
                     {aiSummary.total === 0 ? (
                       <div className="text-center py-8">
-                        <p className="text-indigo-900/60 dark:text-indigo-200/60">Not enough reviews to generate AI insights yet.</p>
+                        <p className="text-indigo-900/60 dark:text-indigo-200/60">
+                          No TutorMatch reviews have been analysed yet, so there are no
+                          sentiment insights to show.
+                          {reviewsList.length > 0 && " The reviews below came from Google."}
+                        </p>
                       </div>
                     ) : (
                       <>
@@ -452,7 +522,11 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                 </Card>
 
                 {/* Individual Reviews */}
-                <ReviewsClient reviewsList={reviewsList} totalRatings={centre.reviews} />
+                <ReviewsClient
+                  reviewsList={reviewsList}
+                  totalRatings={centre.reviews}
+                  totalRatingsSource={centre.ratingSource}
+                />
 
                 {/* Interactive Review Submission Form */}
                 <ReviewForm centreId={centre.id} />

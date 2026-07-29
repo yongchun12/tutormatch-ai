@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import dbConnect from "@/lib/db";
 import { User } from "@/models/User";
 import { hashToken } from "@/lib/tokens";
+import { validatePassword } from "@/lib/password";
 
 /**
  * Completes the forgot-password flow: validates the one-time token, sets the new
@@ -15,8 +16,9 @@ export async function POST(req: Request) {
     if (!token || !password) {
       return NextResponse.json({ error: "Token and new password are required." }, { status: 400 });
     }
-    if (password.length < 6) {
-      return NextResponse.json({ error: "Password must be at least 6 characters." }, { status: 400 });
+    const passwordProblem = validatePassword(password);
+    if (passwordProblem) {
+      return NextResponse.json({ error: passwordProblem }, { status: 400 });
     }
 
     await dbConnect();

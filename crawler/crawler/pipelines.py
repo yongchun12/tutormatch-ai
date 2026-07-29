@@ -48,7 +48,7 @@ VALID_STATUSES = ("pending", "approved", "rejected")
 # is refused these are removed outright rather than zeroed, so the centre page
 # shows "No reviews yet" rather than a real-looking 0.0 rating.
 GOOGLE_ONLY_FIELDS = (
-    "averageRating", "reviewCount", "googlePlaceId",
+    "averageRating", "reviewCount", "ratingSource", "googlePlaceId",
     "latitude", "longitude", "location", "logoUrl",
 )
 
@@ -248,6 +248,10 @@ def apply_required_defaults(item):
         doc.pop("teachingMode")
     if doc.get("status") not in VALID_STATUSES:
         doc["status"] = "pending"
+    # ratingSource is an enum too. Only "google" is ever set here — the crawler
+    # never produces a TutorMatch rating.
+    if doc.get("ratingSource") is not None and doc.get("ratingSource") != "google":
+        doc.pop("ratingSource")
 
     # List fields must be lists — a bare string here breaks `.map()` on the page.
     for field in ("subjects", "galleryUrls"):
@@ -300,11 +304,7 @@ class MongoPipeline:
         api_key = os.getenv('GOOGLE_MAPS_API_KEY')
         if api_key and name:
             try:
-                # Search Google Maps for this name in the city the spider actually
-                # scraped. Hard-coding "Kuala Lumpur" here used to send every
-                # centre — including Penang and Johor ones — to the wrong area,
-                # so Google either found nothing or matched a same-named centre
-                # in the wrong state.
+
                 area = item.get('city') or item.get('state') or 'Malaysia'
                 query = requests.utils.quote(f"{name} {area}")
                 url = (
@@ -312,9 +312,7 @@ class MongoPipeline:
                     f"?query={query}&key={api_key}"
                 )
 
-                # Scrapy's ROBOTSTXT_OBEY only covers requests the spider
-                # yields; this call is made by the pipeline, so it needs its own
-                # check. Cached per domain, and fails closed.
+
                 allowed, reason = is_crawl_allowed(url)
 
                 if not allowed:
@@ -327,12 +325,6 @@ class MongoPipeline:
                     ).json()
 
                     if resp.get('status') == 'OK' and len(resp.get('results', [])) > 0:
-                        # Do NOT blindly take results[0]. Google always returns
-                        # its best guess, so a centre with no Maps listing would
-                        # silently inherit a neighbouring business's rating and
-                        # review count. Only accept a result whose name really
-                        # matches, or whose location corroborates a partial name
-                        # match. See crawler/matching.py.
                         place, match_reason, similarity = best_place_match(
                             item, resp.get('results', [])
                         )
@@ -349,9 +341,10 @@ class MongoPipeline:
 
                     if place is not None:
                         # MERGE GOOGLE MAPS DATA INTO SCRAPY DATA
-                        # We inject the Google Rating and Real Address into the Scrapy item
                         item['averageRating'] = place.get('rating', item.get('averageRating', 0.0))
                         item['reviewCount'] = place.get('user_ratings_total', item.get('reviewCount', 0))
+                        if place.get('rating'):
+                            item['ratingSource'] = 'google'
                         item['address'] = place.get('formatted_address', item.get('address'))
                         item['googleMatchConfidence'] = round(similarity, 3)
                         item['googleMatchReason'] = match_reason
@@ -384,17 +377,11 @@ class MongoPipeline:
 
         existing = self.db['tuitioncentres'].find_one({"name": name})
         if existing:
-            # Never reset createdAt on an existing record, and never re-decide
-            # the status of a centre an admin (or owner) has already dealt with.
             doc.pop('createdAt', None)
             doc.pop('status', None)
 
             update = {"$set": doc}
 
-            # A refused match has to REMOVE the Google fields, not just decline
-            # to write new ones. $set alone would leave a rating and place ID
-            # from an earlier, unchecked run sitting on the record — which is
-            # exactly the borrowed reputation the match check exists to stop.
             if doc.get('googleMatchRejected') and any(
                 existing.get(field) is not None for field in GOOGLE_ONLY_FIELDS
             ):

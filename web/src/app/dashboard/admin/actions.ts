@@ -7,6 +7,7 @@ import { User } from "@/models/User";
 import { ClaimRequest } from "@/models/ClaimRequest";
 import { GateDecision } from "@/models/GateDecision";
 import { requireAdmin, requireUser } from "@/lib/authz";
+import { needsEnrichment } from "@/lib/quality-gate";
 import { revalidatePath } from "next/cache";
 
 export async function approveCentreAction(centreId: string) {
@@ -257,38 +258,155 @@ export async function updateCentreAction(formData: FormData) {
 
     const subjects = subjectsStr ? subjectsStr.split(",").map(s => s.trim()).filter(Boolean) : [];
 
-    await TuitionCentre.findByIdAndUpdate(id, {
-        name,
-        ownerId: ownerId || undefined,
-        address,
-        city,
-        state,
-        description,
-        priceRange,
-        subjects
+    const centre = await TuitionCentre.findById(id);
+    if (!centre) throw new Error("Centre not found");
+
+    centre.name = name;
+    centre.ownerId = (ownerId || undefined) as never;
+    centre.address = address;
+    centre.city = city;
+    centre.state = state;
+    centre.description = description;
+    centre.priceRange = priceRange;
+    centre.subjects = subjects;
+
+    // Re-evaluate whether the listing is still incomplete.
+    //
+    // This was missing, and the gap was self-defeating: the "listings needing
+    // enrichment" panel offers an Edit button, but saving from that form wrote
+    // the subjects without clearing the flag — so filling a centre in by hand,
+    // from the queue's own button, left it sitting in the queue forever. The
+    // owner form and the AI sync both already do this.
+    //
+    // The whole record is passed, not just `{ subjects }`: the check also reads
+    // coordinates and the Google Place ID.
+    centre.needsEnrichment = needsEnrichment({
+        subjects,
+        latitude: centre.latitude,
+        longitude: centre.longitude,
+        googlePlaceId: centre.googlePlaceId,
+        discoverySource: centre.discoverySource,
     });
 
+    await centre.save();
+
     revalidatePath("/dashboard/admin/centres");
+    revalidatePath("/dashboard/admin/crawler");
     revalidatePath("/centres");
     revalidatePath(`/centres/${id}`);
 }
 
-export async function submitClaimRequestAction(userId: string, centreId: string, proofMessage: string) {
+/** Why a claim was refused, so the UI can style the outcome without matching on text. */
+export type ClaimRefusal =
+    | "not-signed-in"
+    | "missing-proof"
+    | "centre-missing"
+    | "already-yours"
+    | "already-owned"
+    | "own-claim-pending"
+    | "other-claim-pending";
+
+export type SubmitClaimResult =
+    | { success: true }
+    | { success: false; reason: ClaimRefusal; message: string };
+
+/**
+ * Returns its outcome rather than throwing.
+ *
+ * Next.js redacts Server Action error messages in a production build — a thrown
+ * `Error("Another account has already claimed this centre")` reaches the browser
+ * as a generic "unexpected error" digest. Every message below is meant to be
+ * read by the user, so they are returned as data.
+ */
+export async function submitClaimRequestAction(
+    _userId: string,
+    centreId: string,
+    proofMessage: string
+): Promise<SubmitClaimResult> {
     // A claim is submitted by the claimant themselves — require a signed-in user
     // and always attribute the claim to that session, never a caller-supplied id.
-    const user = await requireUser();
-    const claimantId = user.id;
+    let claimantId: string;
+    try {
+        const user = await requireUser();
+        claimantId = user.id;
+    } catch {
+        return {
+            success: false,
+            reason: "not-signed-in",
+            message: "Please sign in to claim a centre.",
+        };
+    }
 
-    if (!centreId || !proofMessage) {
-        throw new Error("Missing required fields for claim request");
+    if (!centreId || !proofMessage?.trim()) {
+        return {
+            success: false,
+            reason: "missing-proof",
+            message: "Please describe how you can prove you manage this centre.",
+        };
     }
 
     await dbConnect();
 
-    // Check if a pending claim already exists
-    const existing = await ClaimRequest.findOne({ userId: claimantId, centreId, status: "pending" });
-    if (existing) {
-        throw new Error("You already have a pending claim for this centre.");
+    // Three separate ways a claim must be refused. Previously only the second was
+    // checked, so two different accounts could both hold a pending claim on the
+    // same centre, and a centre that already had an owner could still be claimed
+    // — whichever claim an admin approved last silently took ownership.
+    //
+    // Ordered most-specific-first so the message names the case that actually
+    // applies to this user.
+    const centre = await TuitionCentre.findById(centreId).select("ownerId name").lean();
+    if (!centre) {
+        return {
+            success: false,
+            reason: "centre-missing",
+            message: "That centre no longer exists.",
+        };
+    }
+
+    // 1. Already owned.
+    if (centre.ownerId) {
+        if (centre.ownerId.toString() === claimantId) {
+            return {
+                success: false,
+                reason: "already-yours",
+                message: "You already own this centre — you'll find it in your owner dashboard.",
+            };
+        }
+        return {
+            success: false,
+            reason: "already-owned",
+            message:
+                "This centre has already been claimed and verified by its owner, so it can't be claimed again. " +
+                "If you believe that's wrong, contact support and we'll look into it.",
+        };
+    }
+
+    // 2. This user has already asked.
+    const ownClaim = await ClaimRequest.findOne({ userId: claimantId, centreId, status: "pending" });
+    if (ownClaim) {
+        return {
+            success: false,
+            reason: "own-claim-pending",
+            message:
+                "You've already submitted a claim for this centre and it's waiting on admin review. " +
+                "There's nothing more to do — we'll be in touch once it's been looked at.",
+        };
+    }
+
+    // 3. Somebody else got there first. Deliberately does not say who.
+    const otherClaim = await ClaimRequest.findOne({
+        userId: { $ne: claimantId },
+        centreId,
+        status: "pending",
+    });
+    if (otherClaim) {
+        return {
+            success: false,
+            reason: "other-claim-pending",
+            message:
+                "Another account has already claimed this centre and that request is waiting on admin review. " +
+                "Only one claim can be open at a time — please contact support if this centre is yours.",
+        };
     }
 
     await ClaimRequest.create({
@@ -299,6 +417,7 @@ export async function submitClaimRequestAction(userId: string, centreId: string,
     });
 
     revalidatePath(`/centres/${centreId}`);
+    return { success: true };
 }
 
 export async function approveClaimRequestAction(claimId: string) {
@@ -308,9 +427,30 @@ export async function approveClaimRequestAction(claimId: string) {
     const claim = await ClaimRequest.findById(claimId);
     if (!claim) throw new Error("Claim not found");
 
+    // The submit-side guard stops competing claims being created, but claims
+    // predating that guard may still be sitting in the queue, and two admins
+    // could approve two of them at once. This is the point where ownership
+    // actually transfers, so re-check here rather than trusting the queue.
+    const centre = await TuitionCentre.findById(claim.centreId).select("ownerId name").lean();
+    if (!centre) throw new Error("That centre no longer exists.");
+    if (centre.ownerId && centre.ownerId.toString() !== claim.userId.toString()) {
+        throw new Error(
+            `"${centre.name}" is already owned by another account. Reject this claim, ` +
+            `or remove the existing owner first.`
+        );
+    }
+
     // Approve the claim
     claim.status = "approved";
     await claim.save();
+
+    // Any other claim on the same centre has now lost. Closing them here keeps
+    // the queue truthful — they would otherwise sit as "pending" forever against
+    // a centre that can no longer be claimed.
+    await ClaimRequest.updateMany(
+        { _id: { $ne: claim._id }, centreId: claim.centreId, status: "pending" },
+        { $set: { status: "rejected" } }
+    );
 
     // Upgrade the user to owner
     await User.findByIdAndUpdate(claim.userId, { role: "owner" });

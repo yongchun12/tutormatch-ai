@@ -104,6 +104,9 @@ export default async function CentresDirectory(props: { searchParams: Promise<{ 
       location: formatLocation(c.city, c.state),
       rating: c.averageRating || 0, // Real rating (0 = not rated yet), not fabricated
       reviews: c.reviewCount || centreReviews, // Real review count from Google Maps or local
+      // Which platform the two figures above describe, so the card can say so
+      // rather than implying TutorMatch collected them.
+      ratingSource: c.ratingSource ?? null,
       // Guarded for the same reason as mode: the client maps over this, and a
       // record written straight to MongoDB bypasses the schema default.
       subjects: Array.isArray(c.subjects) ? c.subjects : [],

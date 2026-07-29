@@ -60,6 +60,11 @@ export default async function SavedCentresPage() {
                         <Badge className="bg-white/90 text-slate-900 hover:bg-white border-none font-bold shadow-sm backdrop-blur-md">
                         <Star className="w-3.5 h-3.5 text-yellow-500 mr-1 fill-yellow-500" />
                         {centre.averageRating || 0} ({centre.reviewCount || 0} reviews)
+                        {centre.ratingSource === "google"
+                          ? " · Google"
+                          : centre.ratingSource === "tutormatch"
+                            ? " · TutorMatch"
+                            : ""}
                         </Badge>
                         <div className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center backdrop-blur-md transition-colors text-white">
                         <Heart className="w-4 h-4 fill-white" />

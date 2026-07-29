@@ -58,6 +58,8 @@ export interface CentreInput {
   subjects?: string[];
   averageRating?: number;
   reviewCount?: number;
+  /** Platform the two figures above describe. See models/TuitionCentre.ts. */
+  ratingSource?: "google" | "tutormatch";
   latitude?: number | null;
   longitude?: number | null;
 }
@@ -211,8 +213,17 @@ export function scoreCentre(
     );
   }
   if ((centre.reviewCount ?? 0) > 0) {
+    // Named platform, not a bare star count: this figure is Google's for almost
+    // every crawled centre, and the explanation is shown to students as the
+    // system's reasoning.
+    const platform =
+      centre.ratingSource === "google"
+        ? " on Google"
+        : centre.ratingSource === "tutormatch"
+          ? " on TutorMatch"
+          : "";
     reasons.push(
-      `${(centre.averageRating ?? 0).toFixed(1)}★ from ${centre.reviewCount} reviews`,
+      `${(centre.averageRating ?? 0).toFixed(1)}★ from ${centre.reviewCount} reviews${platform}`,
     );
   }
   if (distKm !== null) {
