@@ -33,11 +33,6 @@ ROBOTS_TIMEOUT = 5  # seconds
 _cache = {}
 
 
-def clear_cache():
-    """Clear the per-domain cache. Used by tests."""
-    _cache.clear()
-
-
 def _load(origin):
     cached = _cache.get(origin)
     if cached and (time.time() - cached[1]) < CACHE_TTL_SECONDS:

@@ -41,11 +41,6 @@ export interface RobotsVerdict {
   crawlDelaySeconds?: number;
 }
 
-/** Clears the cache. Exposed for local testing. */
-export function clearRobotsCache(): void {
-  cache.clear();
-}
-
 async function loadRules(origin: string): Promise<RobotsRules> {
   const cached = cache.get(origin);
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {

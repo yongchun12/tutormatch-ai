@@ -1,5 +1,4 @@
 # Python
-ai-service/venv/
 crawler/venv/
 __pycache__/
 *.pyc

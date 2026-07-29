@@ -71,12 +71,6 @@ const STYLES = {
   },
 } as const;
 
-export function ratingSourceLabel(source: RatingSource): string {
-  if (source === "google") return STYLES.google.label;
-  if (source === "tutormatch") return STYLES.tutormatch.label;
-  return STYLES.unknown.label;
-}
-
 /**
  * Resolve everything needed to render one centre's rating.
  *
