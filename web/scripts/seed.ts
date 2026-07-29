@@ -5,6 +5,7 @@ import { TuitionCentre } from "../src/models/TuitionCentre";
 import { Review } from "../src/models/Review";
 import { recalculateCentreRating } from "../src/lib/review-helpers";
 import bcrypt from "bcryptjs";
+import { assertDisposableDatabase, announceDatabase, DB_NAME } from "./_guard";
 
 // Load environment variables from .env.local
 dotenv.config({ path: ".env.local" });
@@ -18,9 +19,15 @@ if (!MONGODB_URI) {
 
 const seedData = async () => {
   try {
+    // This script deletes every user, centre and review before inserting its
+    // fixtures. Against the real database that would take the crawled centres
+    // with it, so it refuses unless pointed at a disposable one.
+    announceDatabase("seed");
+    assertDisposableDatabase("delete all users, centres and reviews");
+
     console.log("⏳ Connecting to MongoDB...");
-    await mongoose.connect(MONGODB_URI);
-    console.log("✅ Connected to MongoDB");
+    await mongoose.connect(MONGODB_URI, { dbName: DB_NAME });
+    console.log(`✅ Connected to MongoDB (database: ${DB_NAME})`);
 
     console.log("⏳ Clearing existing data...");
     await User.deleteMany({});

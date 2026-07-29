@@ -19,13 +19,18 @@ export default async function Home() {
   // strings that did not correspond to anything in the database.
   let approvedCentres = 0;
   let verifiedCentres = 0;
-  let reviewCount = 0;
+  let classifiedReviewCount = 0;
   try {
     await dbConnect();
-    [approvedCentres, verifiedCentres, reviewCount] = await Promise.all([
+    [approvedCentres, verifiedCentres, classifiedReviewCount] = await Promise.all([
       TuitionCentre.countDocuments({ status: "approved" }),
       TuitionCentre.countDocuments({ status: "approved", isVerified: true }),
-      Review.countDocuments({}),
+      // Only what the sentiment model actually scored. The copy below claims
+      // every one of these reviews is classified, so counting all reviews would
+      // start lying the moment a review lacks a sentimentScore — or the moment
+      // Google reviews (which our model does not score) are stored as Review
+      // documents, which the schema already allows via `source`.
+      Review.countDocuments({ source: "tutormatch", sentimentScore: { $exists: true, $ne: null } }),
     ]);
   } catch (error) {
     // The homepage must still render if the database is unreachable; the copy
@@ -112,8 +117,8 @@ export default async function Home() {
               </div>
               <h3 className="font-heading text-xl font-bold mb-3 dark:text-white">Sentiment Analysis</h3>
               <p className="text-slate-600 dark:text-slate-400">
-                {reviewCount > 0
-                  ? `Every one of the ${reviewCount.toLocaleString()} review${reviewCount === 1 ? "" : "s"} left here is classified as positive, neutral or negative, so you see the balance of opinion rather than a single averaged star rating.`
+                {classifiedReviewCount > 0
+                  ? `Every one of the ${classifiedReviewCount.toLocaleString()} review${classifiedReviewCount === 1 ? "" : "s"} left here is classified as positive, neutral or negative, so you see the balance of opinion rather than a single averaged star rating.`
                   : "Reviews left here are classified as positive, neutral or negative, so you see the balance of opinion rather than a single averaged star rating."}
               </p>
             </div>

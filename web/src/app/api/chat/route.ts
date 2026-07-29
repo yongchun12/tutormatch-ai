@@ -12,6 +12,9 @@ import { z } from "zod";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { discoverAndSyncCentres } from "@/services/scraperService";
+// Location and subject arrive from a model reading a free-text chat message,
+// so both are untrusted input before they reach a $regex.
+import { escapeRegex } from "@/lib/utils";
 
 export const maxDuration = 45;
 
@@ -126,24 +129,46 @@ Never claim there are no centres when the cards contain suggestions.`,
               }
             }
 
-            // Match on the area word (e.g. "Subang" from "Subang Jaya Medical
-            // Centre") so a landmark still matches centres stored as "Subang Jaya".
-            const locTerm = loc.split(/[\s,]+/).find((w) => w.length >= 4) || loc;
-            const locFilter =
-              loc !== ""
-                ? {
-                    $or: [
-                      { city: { $regex: locTerm, $options: "i" } },
-                      { state: { $regex: locTerm, $options: "i" } },
-                      { address: { $regex: locTerm, $options: "i" } },
-                    ],
-                  }
-                : {};
+            /*
+              Location matching, from most specific to least.
+
+              This used to take the first word of four or more characters and
+              regex the whole database for it. For "Batu Pahat, Johor" that word
+              is "Batu" — one of the commonest place-name prefixes in Malaysia —
+              so the advisor answered a Johor question with centres in Batu
+              Maung and Batu Lanchang, both in Penang, and Batu Caves in
+              Selangor. 29 stored centres match /Batu/i and only 10 of them are
+              in Batu Pahat.
+
+              Now every comma-separated component of the location has to match
+              something ("Batu Pahat" AND "Johor"), and the fallback loosens to
+              the most specific component as a whole phrase — never to a single
+              leading word.
+            */
+            const locParts = loc.split(",").map((p) => p.trim()).filter(Boolean);
+
+            /** One component matched against any of the stored location fields. */
+            const locationClause = (term: string) => {
+              const rx = { $regex: escapeRegex(term), $options: "i" };
+              return { $or: [{ city: rx }, { state: rx }, { address: rx }] };
+            };
+
+            // Every component must appear: "Batu Pahat" and "Johor".
+            const strictLocFilter =
+              locParts.length > 0 ? { $and: locParts.map(locationClause) } : {};
+            // The town on its own, for centres whose state field is missing or
+            // spelled differently. Still a phrase, so "Batu Maung" cannot match.
+            const looseLocFilter =
+              locParts.length > 0 ? locationClause(locParts[0]) : {};
+
             const subjFilter =
-              subj !== "" ? { subjects: { $regex: subj, $options: "i" } } : {};
+              subj !== "" ? { subjects: { $regex: escapeRegex(subj), $options: "i" } } : {};
 
             // 2. Exact match: subject + location.
-            const exact = await findCentres({ ...locFilter, ...subjFilter });
+            let exact = await findCentres({ ...strictLocFilter, ...subjFilter });
+            if (exact.length === 0 && locParts.length > 1) {
+              exact = await findCentres({ ...looseLocFilter, ...subjFilter });
+            }
             if (exact.length > 0) {
               return { location: loc, subject: subj, matchType: "exact", centres: exact.map(toCard) };
             }
@@ -151,7 +176,10 @@ Never claim there are no centres when the cards contain suggestions.`,
             // 3. Alternatives — instead of a dead end, suggest the closest fits.
             //    (a) same location, any subject
             if (loc && subj) {
-              const sameArea = await findCentres(locFilter);
+              let sameArea = await findCentres(strictLocFilter);
+              if (sameArea.length === 0 && locParts.length > 1) {
+                sameArea = await findCentres(looseLocFilter);
+              }
               if (sameArea.length > 0) {
                 return { location: loc, subject: subj, matchType: "alternatives", centres: sameArea.map(toCard) };
               }

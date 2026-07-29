@@ -11,9 +11,11 @@ import Link from "next/link";
 import { deleteUserAction } from "../actions";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { ActionModal } from "@/components/ui/action-modal";
+import { AdminSearch } from "@/components/admin/AdminSearch";
+import { escapeRegex } from "@/lib/utils";
 
 export default async function ManageUsers(props: {
-    searchParams: Promise<{ page?: string }>
+    searchParams: Promise<{ page?: string; q?: string }>
 }) {
     const searchParams = await props.searchParams;
     const session = await getServerSession(authOptions);
@@ -27,9 +29,22 @@ export default async function ManageUsers(props: {
     const limit = 10;
     const skip = (page - 1) * limit;
 
-    // Fetch all users with pagination
-    const total = await User.countDocuments();
-    const allUsers = await User.find({})
+    // Search runs in the query, not over the current page — the list is
+    // paginated, so filtering client-side would only ever search the ten rows
+    // already on screen.
+    const q = (searchParams.q || "").trim();
+    const filter = q
+        ? {
+              $or: [
+                  { name: { $regex: escapeRegex(q), $options: "i" } },
+                  { email: { $regex: escapeRegex(q), $options: "i" } },
+                  { role: { $regex: escapeRegex(q), $options: "i" } },
+              ],
+          }
+        : {};
+
+    const total = await User.countDocuments(filter);
+    const allUsers = await User.find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -51,6 +66,15 @@ export default async function ManageUsers(props: {
                         <Plus className="w-4 h-4" /> Add User
                     </Button>
                 </Link>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <AdminSearch placeholder="Search name, email or role…" />
+                <span className="text-sm text-slate-500 dark:text-slate-400">
+                    {q
+                        ? `${total} ${total === 1 ? "match" : "matches"} for “${q}”`
+                        : `${total} ${total === 1 ? "account" : "accounts"}`}
+                </span>
             </div>
 
             <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm">
@@ -113,7 +137,9 @@ export default async function ManageUsers(props: {
                                 {allUsers.length === 0 && (
                                     <tr>
                                         <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                                            No users found in the database.
+                                            {q
+                                                ? `No accounts match “${q}”.`
+                                                : "No users found in the database."}
                                         </td>
                                     </tr>
                                 )}

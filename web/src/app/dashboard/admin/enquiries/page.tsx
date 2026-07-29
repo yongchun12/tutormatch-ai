@@ -13,9 +13,11 @@ import { User } from "@/models/User";
 import { adminDeleteEnquiryAction } from "./actions";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { ActionModal } from "@/components/ui/action-modal";
+import { AdminSearch } from "@/components/admin/AdminSearch";
+import { escapeRegex } from "@/lib/utils";
 
 export default async function AdminEnquiriesPage(props: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; q?: string }>;
 }) {
   const searchParams = await props.searchParams;
   const session = await getServerSession(authOptions);
@@ -29,11 +31,36 @@ export default async function AdminEnquiriesPage(props: {
   const limit = 10;
   const skip = (page - 1) * limit;
 
-  const total = await Enquiry.countDocuments();
+  /*
+    The searchable text an admin actually has in mind — "who sent it" and
+    "which centre" — lives on the referenced User and TuitionCentre documents,
+    not on the enquiry. Mongo cannot filter on a populated field, so the two
+    reference collections are resolved to ids first and matched alongside the
+    enquiry's own message and status.
+  */
+  const q = (searchParams.q || "").trim();
+  let filter: Record<string, unknown> = {};
+  if (q) {
+    const rx = { $regex: escapeRegex(q), $options: "i" };
+    const [students, centres] = await Promise.all([
+      User.find({ $or: [{ name: rx }, { email: rx }] }).select("_id").lean(),
+      TuitionCentre.find({ name: rx }).select("_id").lean(),
+    ]);
+    filter = {
+      $or: [
+        { message: rx },
+        { reply: rx },
+        { status: rx },
+        { studentId: { $in: students.map((s) => s._id) } },
+        { centreId: { $in: centres.map((c) => c._id) } },
+      ],
+    };
+  }
+
+  const total = await Enquiry.countDocuments(filter);
   const totalPages = Math.ceil(total / limit);
 
-  // Find all enquiries across the platform
-  const enquiries = await Enquiry.find()
+  const enquiries = await Enquiry.find(filter)
     .populate({ path: "studentId", select: "name email", model: User })
     .populate({ path: "centreId", select: "name ownerId", model: TuitionCentre })
     .sort({ createdAt: -1 })
@@ -57,14 +84,27 @@ export default async function AdminEnquiriesPage(props: {
           </div>
         </div>
 
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <AdminSearch placeholder="Search student, centre or message…" />
+          <span className="text-sm text-slate-500 dark:text-slate-400">
+            {q
+              ? `${total} ${total === 1 ? "match" : "matches"} for “${q}”`
+              : `${total} ${total === 1 ? "enquiry" : "enquiries"}`}
+          </span>
+        </div>
+
         {enquiries.length === 0 ? (
           <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm text-center py-16">
             <CardContent className="flex flex-col items-center">
               <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-400 mb-4">
                 <SearchX className="w-8 h-8" />
               </div>
-              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">No enquiries found</h3>
-              <p className="text-slate-500">There are no enquiries in the system yet.</p>
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
+                {q ? "No matching enquiries" : "No enquiries found"}
+              </h3>
+              <p className="text-slate-500">
+                {q ? `Nothing matches “${q}”.` : "There are no enquiries in the system yet."}
+              </p>
             </CardContent>
           </Card>
         ) : (

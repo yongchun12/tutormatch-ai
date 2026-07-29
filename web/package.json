@@ -8,7 +8,16 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx scripts/seed.ts",
-    "cron": "tsx scripts/local_cron.ts"
+    "cron": "tsx scripts/local_cron.ts",
+    "wipe": "tsx scripts/wipe_db.ts",
+    "backfill:ratings": "tsx scripts/backfill_rating_sources.ts",
+    "dev:test": "MONGODB_DB=tutormatch_test next dev",
+    "seed:test": "MONGODB_DB=tutormatch_test tsx scripts/seed.ts",
+    "wipe:test": "MONGODB_DB=tutormatch_test tsx scripts/wipe_db.ts",
+    "cron:test": "MONGODB_DB=tutormatch_test tsx scripts/local_cron.ts",
+    "db:which": "tsx scripts/which_db.ts",
+    "export:snapshot": "tsx scripts/export_snapshot.ts",
+    "figures": "tsx scripts/results_figures.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.18",

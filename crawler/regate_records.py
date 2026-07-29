@@ -68,7 +68,7 @@ def main():
         sys.exit("MONGODB_URI is not set in web/.env.local")
 
     client = pymongo.MongoClient(uri, serverSelectionTimeoutMS=30000)
-    db = client["test"]
+    db = client[os.getenv("MONGODB_DB", "test")]
     centres = db["tuitioncentres"]
 
     rows = list(centres.find({}).sort("name", 1))

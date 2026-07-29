@@ -12,6 +12,15 @@ export default function HomeSearchClient() {
   const [predictions, setPredictions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  /**
+   * The place picked from the dropdown, held until the user actually searches.
+   *
+   * Choosing a suggestion used to geocode and navigate on the spot, so the page
+   * jumped to /centres the moment a location was picked — before the subject
+   * box had been filled in, and with no way to change your mind. Selecting is
+   * now just selecting; only the Search button or Enter navigates.
+   */
+  const [selectedPlace, setSelectedPlace] = useState<{ lat: string; lng: string; description: string } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const subjectDropdownRef = useRef<HTMLDivElement>(null);
   const [showSubjectDropdown, setShowSubjectDropdown] = useState(false);
@@ -65,34 +74,55 @@ export default function HomeSearchClient() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  /** Pick a suggestion: fill the box and remember its coordinates. Never navigates. */
   const handleSelectLocation = async (placeId: string, description: string) => {
     setShowDropdown(false);
     setQuery(description);
-    
+    setPredictions([]);
+
     try {
       const res = await fetch(`/api/location/geocode?place_id=${placeId}`);
       const data = await res.json();
-      
       if (data.lat && data.lng) {
-        // Navigate to centres page with coordinates and subject
-        const params = new URLSearchParams();
-        params.append("lat", data.lat);
-        params.append("lng", data.lng);
-        params.append("address", description);
-        if (subjectQuery) params.append("q", subjectQuery);
-        
-        router.push(`/centres?${params.toString()}`);
+        setSelectedPlace({ lat: String(data.lat), lng: String(data.lng), description });
       }
     } catch (err) {
+      // Non-fatal: the search falls back to matching the address as text.
       console.error(err);
     }
   };
 
-  const handleGenericSearch = () => {
+  /**
+   * The only thing that navigates. Prefers the coordinates of a picked
+   * suggestion (a distance search is far more reliable for landmarks than
+   * matching address text), and falls back to the typed text otherwise.
+   */
+  const handleSearch = () => {
+    setShowDropdown(false);
+    setShowSubjectDropdown(false);
+
     const params = new URLSearchParams();
     if (subjectQuery) params.append("q", subjectQuery);
-    if (query) params.append("address", query);
+
+    // Only trust the coordinates if the box still holds the place they describe;
+    // typing after picking means the user has moved on to somewhere else.
+    if (selectedPlace && selectedPlace.description === query) {
+      params.append("lat", selectedPlace.lat);
+      params.append("lng", selectedPlace.lng);
+      params.append("address", selectedPlace.description);
+    } else if (query) {
+      params.append("address", query);
+    }
+
     router.push(`/centres?${params.toString()}`);
+  };
+
+  /** Enter searches from either box, matching the Search button exactly. */
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSearch();
+    }
   };
 
   return (
@@ -109,6 +139,7 @@ export default function HomeSearchClient() {
               setShowSubjectDropdown(true);
             }}
             onFocus={() => setShowSubjectDropdown(true)}
+            onKeyDown={handleKeyDown}
             className="w-full bg-transparent border-none outline-none text-slate-900 dark:text-white placeholder:text-slate-400"
           />
           
@@ -118,6 +149,7 @@ export default function HomeSearchClient() {
               {filteredSubjects.map((sub) => (
                 <button
                   key={sub}
+                  type="button"
                   onClick={() => {
                     setSubjectQuery(sub);
                     setShowSubjectDropdown(false);
@@ -139,15 +171,18 @@ export default function HomeSearchClient() {
             onChange={(e) => {
               setQuery(e.target.value);
               setShowDropdown(true);
+              // Typing means they are no longer pointing at the picked place.
+              setSelectedPlace(null);
             }}
             onFocus={() => setShowDropdown(true)}
+            onKeyDown={handleKeyDown}
             className="w-full bg-transparent border-none outline-none text-slate-900 dark:text-white placeholder:text-slate-400"
           />
           {loading && <Loader2 className="w-4 h-4 text-indigo-500 animate-spin absolute right-4" />}
         </div>
         <Button 
           size="lg" 
-          onClick={handleGenericSearch}
+          onClick={handleSearch}
           className="w-full sm:w-auto rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md"
         >
           Search
@@ -160,6 +195,7 @@ export default function HomeSearchClient() {
           {predictions.map((p) => (
             <button
               key={p.place_id}
+              type="button"
               onClick={() => handleSelectLocation(p.place_id, p.description)}
               className="w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800/50 last:border-0 flex items-start gap-3 transition-colors"
             >

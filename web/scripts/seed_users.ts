@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import * as dotenv from "dotenv";
 import { User } from "../src/models/User";
 import bcrypt from "bcryptjs";
+import { assertDisposableDatabase, announceDatabase, DB_NAME } from "./_guard";
 
 dotenv.config({ path: ".env.local" });
 
@@ -9,8 +10,12 @@ const run = async () => {
   const MONGODB_URI = process.env.MONGODB_URI;
   if (!MONGODB_URI) throw new Error("No MONGODB_URI");
 
-  await mongoose.connect(MONGODB_URI);
-  console.log("Connected.");
+  // Deletes every user account, including any real owner/admin logins.
+  announceDatabase("seed_users");
+  assertDisposableDatabase("delete all user accounts");
+
+  await mongoose.connect(MONGODB_URI, { dbName: DB_NAME });
+  console.log(`Connected (database: ${DB_NAME}).`);
 
   // Pre-verify every demo account (the User schema defaults emailVerified to
   // false, which blocks login) so a fresh seed is immediately usable.

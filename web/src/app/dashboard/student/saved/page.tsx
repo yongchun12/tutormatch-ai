@@ -102,9 +102,11 @@ export default async function SavedCentresPage() {
                     
                     <CardFooter className="border-t border-slate-100 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between mt-auto">
                         <div>
-                        <div className="text-lg font-bold text-slate-900 dark:text-white">{centre.priceRange || 'Contact for price'}</div>
-                        <div className="text-xs text-slate-500 flex items-center mt-0.5">
-                            <Clock className="w-3.5 h-3.5 mr-1" />
+                        {/* The price line here read "Contact for pricing" on all but 3
+                            of 373 centres, so it is gone along with the rest of the
+                            price UI; teaching mode is something we actually know. */}
+                        <div className="text-sm font-semibold text-slate-900 dark:text-white flex items-center">
+                            <Clock className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
                             {formatTeachingModeCaption(centre.teachingMode)}
                         </div>
                         </div>

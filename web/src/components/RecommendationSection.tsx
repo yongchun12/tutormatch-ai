@@ -4,13 +4,14 @@ import { authOptions } from "@/lib/auth";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { StudentLead } from "@/models/StudentLead";
-import { Review } from "@/models/Review";
 import { aiService } from "@/services/aiService";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Star, MapPin, Sparkles } from "lucide-react";
 import { formatLocation } from "@/lib/centre-display";
+import { resolveRating, type RatingSource } from "@/lib/rating-display";
+import { wilsonLowerBound } from "@/lib/recommendation";
 
 interface RecommendedCentre {
   centre_id: string;
@@ -20,6 +21,8 @@ interface RecommendedCentre {
   match_reason?: string;
   average_rating?: number;
   review_count?: number;
+  /** Which platform average_rating and review_count describe. */
+  rating_source?: RatingSource;
   subjects?: string[];
 }
 
@@ -52,33 +55,62 @@ export default async function RecommendationSection() {
     }
 
     if (!usingAI || recommendedCentres.length === 0) {
-      // Fallback: Get top 4 rated centres
-      const topCentres = await TuitionCentre.find({ status: "approved" })
-        .sort({ averageRating: -1, reviewCount: -1 })
-        .limit(4)
-        .lean();
-        
-      const allReviews = await Review.find({}).lean();
+      /*
+        "Top Rated" is ranked by the Wilson lower bound, not by the raw average.
+        Sorting on averageRating put a 5.0-from-1-Google centre above a
+        4.6-from-40-Google one, and ranked Google averages against TutorMatch
+        averages as though they were the same measurement. The Wilson bound is
+        the reliability adjustment the recommender already uses, so the home
+        page now demonstrates it rather than contradicting it.
 
-      recommendedCentres = topCentres.map((c: any) => {
-        const centreReviews = allReviews.filter(r => r.centreId.toString() === c._id.toString()).length;
-        return {
-          centre_id: c._id.toString(),
-          name: c.name,
-          location: formatLocation(c.city, c.state),
-          average_rating: c.averageRating,
-          review_count: c.reviewCount || centreReviews,
-          subjects: c.subjects
-        };
-      });
+        Candidates are pulled with a rating and ordered in memory: the bound
+        depends on both the average and the count, so it cannot be expressed as
+        a Mongo sort.
+      */
+      const candidates = await TuitionCentre.find({
+        status: "approved",
+        averageRating: { $gt: 0 },
+        reviewCount: { $gt: 0 },
+      })
+        .select("name city state averageRating reviewCount ratingSource subjects")
+        .lean();
+
+      recommendedCentres = candidates
+        .map((c: any) => ({
+          rank: wilsonLowerBound(c.averageRating ?? 0, c.reviewCount ?? 0),
+          centre: {
+            centre_id: c._id.toString(),
+            name: c.name,
+            location: formatLocation(c.city, c.state),
+            average_rating: c.averageRating,
+            // The count belonging to the SAME platform as the rating above. This
+            // was `c.reviewCount || centreReviews`, which fell back to counting
+            // TutorMatch review documents whenever the Google count was 0 — so a
+            // Google score could be shown beside a TutorMatch count.
+            review_count: c.reviewCount ?? 0,
+            rating_source: (c.ratingSource ?? null) as RatingSource,
+            subjects: c.subjects,
+          },
+        }))
+        .sort((a, b) => b.rank - a.rank)
+        .slice(0, 4)
+        .map((row) => row.centre);
     } else {
-      // If AI recommends them, we still need local review count
-      const allReviews = await Review.find({}).lean();
-      recommendedCentres = recommendedCentres.map(c => {
-        const centreReviews = allReviews.filter(r => r.centreId.toString() === c.centre_id).length;
+      // The recommender returns scores but not provenance, so read the stored
+      // rating and its source together — never one without the other.
+      const ids = recommendedCentres.map((c) => c.centre_id);
+      const rated = await TuitionCentre.find({ _id: { $in: ids } })
+        .select("averageRating reviewCount ratingSource")
+        .lean();
+      const byId = new Map(rated.map((c: any) => [c._id.toString(), c]));
+
+      recommendedCentres = recommendedCentres.map((c) => {
+        const stored = byId.get(c.centre_id);
         return {
           ...c,
-          review_count: c.review_count || centreReviews
+          average_rating: stored?.averageRating ?? 0,
+          review_count: stored?.reviewCount ?? 0,
+          rating_source: (stored?.ratingSource ?? null) as RatingSource,
         };
       });
     }
@@ -165,17 +197,36 @@ export default async function RecommendationSection() {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-1 mt-auto pt-2">
-                    <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
-                    <span className="font-bold text-sm dark:text-white">
-                      {centre.average_rating === undefined 
-                        ? "0.0" 
-                        : (centre.average_rating || 0).toFixed(1)}
-                    </span>
-                    <span className="text-xs text-slate-400 ml-1">
-                      ({centre.review_count || 0} reviews)
-                    </span>
-                  </div>
+                  {/*
+                    Attributed, and never invented. This used to render a filled
+                    amber star reading "0.0" for a centre nobody had rated,
+                    which shows as a genuine zero score rather than an absence
+                    of data — the detail page says "No reviews yet" instead, and
+                    now so does this. The star is coloured by source (amber =
+                    Google, indigo = TutorMatch) with the label always present,
+                    so colour is never the only cue.
+                  */}
+                  {(() => {
+                    const r = resolveRating(centre.average_rating, centre.review_count, centre.rating_source);
+                    return (
+                      <div className="flex items-center gap-1 mt-auto pt-2">
+                        <Star className={`w-4 h-4 ${r.starClass}`} />
+                        {r.hasRating ? (
+                          <>
+                            <span className="font-bold text-sm dark:text-white">{r.score}</span>
+                            <span className="text-xs text-slate-400 ml-1">
+                              ({r.count} {r.count === 1 ? "review" : "reviews"})
+                            </span>
+                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ml-auto ${r.badgeClass}`}>
+                              {r.sourceLabel}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-xs text-slate-400">{r.emptyLabel}</span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             </Link>

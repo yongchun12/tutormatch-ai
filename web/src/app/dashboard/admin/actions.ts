@@ -8,6 +8,7 @@ import { ClaimRequest } from "@/models/ClaimRequest";
 import { GateDecision } from "@/models/GateDecision";
 import { requireAdmin, requireUser } from "@/lib/authz";
 import { needsEnrichment } from "@/lib/quality-gate";
+import { validatePassword } from "@/lib/password";
 import { revalidatePath } from "next/cache";
 
 export async function approveCentreAction(centreId: string) {
@@ -173,6 +174,13 @@ export async function adminCreateUserAction(formData: FormData) {
         throw new Error("Name, email and password are required.");
     }
 
+    // The same policy the registration and reset routes enforce, so an
+    // admin-created account cannot be weaker than a self-registered one.
+    const problem = validatePassword(password);
+    if (problem) {
+        throw new Error(problem);
+    }
+
     const allowedRoles = ["student", "owner", "admin"] as const;
     const role = (allowedRoles as readonly string[]).includes(roleInput)
         ? (roleInput as (typeof allowedRoles)[number])
@@ -205,9 +213,44 @@ export async function adminUpdateUserAction(formData: FormData) {
     const id = formData.get("id") as string;
     const name = formData.get("name") as string;
     const email = formData.get("email") as string;
-    const role = formData.get("role") as string;
+    const roleInput = formData.get("role") as string;
+    const password = (formData.get("password") as string) || "";
 
-    await User.findByIdAndUpdate(id, { name, email, role });
+    if (!id) {
+        throw new Error("Missing user id.");
+    }
+
+    // Same allowlist the create path uses. Without it, whatever string arrived in
+    // the form was written straight to `role`, and a value outside the enum
+    // silently fails every authorisation check that compares against it.
+    const allowedRoles = ["student", "owner", "admin"] as const;
+    const role = (allowedRoles as readonly string[]).includes(roleInput)
+        ? (roleInput as (typeof allowedRoles)[number])
+        : "student";
+
+    const update: Record<string, unknown> = { name, email, role };
+
+    /*
+      Password is optional on edit: an admin resetting a name should not be
+      forced to invent a new password, and a blank field must never be hashed
+      and stored — that would lock the account out on the next save.
+
+      There is no "reveal the current password" here and cannot be: only the
+      bcrypt hash is stored. An admin can replace a password, not read it.
+    */
+    if (password.trim() !== "") {
+        const problem = validatePassword(password);
+        if (problem) {
+            throw new Error(problem);
+        }
+        update.passwordHash = await bcrypt.hash(password, 10);
+    }
+
+    const updated = await User.findByIdAndUpdate(id, update, { new: true });
+    if (!updated) {
+        throw new Error("User not found.");
+    }
+
     revalidatePath("/dashboard/admin/users");
 }
 

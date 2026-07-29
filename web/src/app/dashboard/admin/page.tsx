@@ -9,8 +9,6 @@ import { Users, Database, ShieldCheck, Activity, BrainCircuit, Globe, LogOut, Fi
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { Enquiry } from "@/models/Enquiry";
-import { SystemLog } from "@/models/SystemLog";
-import AdminLiveLogs from "@/components/admin/AdminLiveLogs";
 import { ClaimRequest } from "@/models/ClaimRequest";
 import { User } from "@/models/User";
 import { Review } from "@/models/Review";
@@ -67,7 +65,6 @@ export default async function AdminDashboard() {
   const totalEnquiriesCount = await Enquiry.countDocuments();
 
   // Fetch real system logs
-  const systemLogs = await SystemLog.find().sort({ createdAt: -1 }).limit(20).lean();
 
   return (
     <div className="p-8">
@@ -347,25 +344,15 @@ export default async function AdminDashboard() {
             </Card>
 
             {/*
-              System Logs. The header (and its status indicator) now lives inside
-              AdminLiveLogs: the dot used to be a hardcoded pulsing green circle,
-              which signalled "live and healthy" over an empty feed. SystemLog is
-              capped and only written during a crawl, so empty is its normal
-              resting state.
+              The System Logs panel that stood here has moved out of the
+              dashboard. It is a live tail of the capped `systemlogs`
+              collection, which is written only while a crawl is running — so on
+              this page it was an empty box almost all of the time, competing for
+              attention with the queues that actually need acting on.
+
+              The collection and the panel both still exist: the tail lives on
+              the Crawler & Gate Activity page, next to the crawl it describes.
             */}
-            <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col h-full p-0 gap-0 min-h-[24rem]">
-              <CardContent className="p-0 flex-1 flex flex-col min-h-0">
-                <AdminLiveLogs
-                  initialLogs={systemLogs.map((log: any) => ({
-                    id: log._id.toString(),
-                    level: log.level,
-                    source: log.source,
-                    message: log.message,
-                    createdAt: log.createdAt ? new Date(log.createdAt).toISOString() : new Date().toISOString(),
-                  }))}
-                />
-              </CardContent>
-            </Card>
           </div>
 
         </div>

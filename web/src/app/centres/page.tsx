@@ -48,6 +48,8 @@ export default async function CentresDirectory(props: { searchParams: Promise<{ 
   const session = await getServerSession(authOptions);
   let studentProfile = null;
   let savedCentreIds: string[] = [];
+  // Falls back to the schema default when nobody is signed in.
+  let defaultRadiusKm = 25;
 
   if (session?.user) {
     const user = await User.findById((session.user as any).id).lean();
@@ -55,6 +57,11 @@ export default async function CentresDirectory(props: { searchParams: Promise<{ 
       // Saved centres for the heart/like button (any signed-in user can save).
       if (user.savedCentres) {
         savedCentreIds = user.savedCentres.map((x: any) => x.toString());
+      }
+      // Reuse the travel distance the student already set in their preferences,
+      // rather than opening the directory on an unrelated hardcoded radius.
+      if (typeof user.maxDistanceKm === "number" && user.maxDistanceKm > 0) {
+        defaultRadiusKm = user.maxDistanceKm;
       }
       if ((session.user as any).role === "student") {
         studentProfile = {
@@ -103,7 +110,14 @@ export default async function CentresDirectory(props: { searchParams: Promise<{ 
       description: c.description,
       location: formatLocation(c.city, c.state),
       rating: c.averageRating || 0, // Real rating (0 = not rated yet), not fabricated
-      reviews: c.reviewCount || centreReviews, // Real review count from Google Maps or local
+      /*
+        The count that belongs to the SAME platform as the rating above.
+        This was `c.reviewCount || centreReviews`, which fell through to a count
+        of TutorMatch review documents whenever the Google count was 0 — so one
+        card could show a Google score beside a TutorMatch count, and the two
+        numbers described different populations without saying so.
+      */
+      reviews: c.reviewCount ?? centreReviews,
       // Which platform the two figures above describe, so the card can say so
       // rather than implying TutorMatch collected them.
       ratingSource: c.ratingSource ?? null,
@@ -125,6 +139,10 @@ export default async function CentresDirectory(props: { searchParams: Promise<{ 
 
   // Pass centres to client component for interactivity
   return (
-    <CentresListClient initialCentres={centres} savedCentreIds={savedCentreIds} />
+    <CentresListClient
+      initialCentres={centres}
+      savedCentreIds={savedCentreIds}
+      defaultRadiusKm={defaultRadiusKm}
+    />
   );
 }

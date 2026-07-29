@@ -286,7 +286,11 @@ class MongoPipeline:
     def from_crawler(cls, crawler):
         return cls(
             mongo_uri=os.getenv('MONGODB_URI', 'mongodb://localhost:27017/tuition_db'),
-            mongo_db='test' # The default DB name if not specified in URI
+            # Honours MONGODB_DB so a crawl can be pointed at a disposable
+            # database. Without this the spider wrote to the real "test"
+            # database no matter how the web app was configured, so testing the
+            # crawler meant mutating the data the results chapter depends on.
+            mongo_db=os.getenv('MONGODB_DB', 'test'),
         )
 
     def open_spider(self, spider):

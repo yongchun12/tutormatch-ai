@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { MapPin, Star, Clock, Search, Sparkles, Navigation, Map, X, ShieldCheck } from "lucide-react";
 import { TEACHING_MODE_UNKNOWN } from "@/lib/centre-display";
+import { resolveRating, formatRatingSummary } from "@/lib/rating-display";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Loader2 } from "lucide-react";
 import CompareModal from "./CompareModal";
@@ -29,16 +30,31 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return distance;
 }
 
-export default function CentresListClient({ initialCentres, savedCentreIds = [] }: { initialCentres: any[]; savedCentreIds?: string[] }) {
+export default function CentresListClient({
+  initialCentres,
+  savedCentreIds = [],
+  defaultRadiusKm = 25,
+}: {
+  initialCentres: any[];
+  savedCentreIds?: string[];
+  /**
+   * Starting search radius, in km. Defaults to the signed-in student's saved
+   * `maxDistanceKm` preference rather than a hardcoded number — they have
+   * already said how far they are willing to travel, and asking twice (then
+   * ignoring the first answer) is what made the directory feel unaware of the
+   * profile the student had just filled in.
+   */
+  defaultRadiusKm?: number;
+}) {
   const [allCentres, setAllCentres] = useState<any[]>(initialCentres);
   const savedIds = useMemo(() => new Set(savedCentreIds), [savedCentreIds]);
   const searchParams = useSearchParams();
   const router = useRouter();
   const { toast } = useToast();
-  
+
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [locationName, setLocationName] = useState<string>("");
-  const [radius, setRadius] = useState<number>(50); // Default 50km per user request
+  const [radius, setRadius] = useState<number>(defaultRadiusKm);
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState("");
   
@@ -53,8 +69,6 @@ export default function CentresListClient({ initialCentres, savedCentreIds = [] 
   const locBoxRef = useRef<HTMLDivElement>(null);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
   const [selectedMode, setSelectedMode] = useState<string>("All");
-  const FEE_MAX = 500; // slider maximum; at this value the fee filter is "off" (no limit)
-  const [maxFee, setMaxFee] = useState<number>(FEE_MAX);
   const [sortOrder, setSortOrder] = useState<string>("Recommended");
   
   // Crawling State
@@ -138,6 +152,35 @@ export default function CentresListClient({ initialCentres, savedCentreIds = [] 
     return Array.from(subjectsSet).sort();
   }, [allCentres]);
 
+  /**
+   * Whether anything is currently narrowing the list.
+   *
+   * Drives the "Clear filters" button, which used to appear only on the empty
+   * state — so a search that returned two wrong results left no way to undo it
+   * except clearing each control by hand.
+   */
+  const hasActiveFilters =
+    searchQuery.trim() !== "" ||
+    locationQuery.trim() !== "" ||
+    selectedSubjects.length > 0 ||
+    selectedMode !== "All" ||
+    userLocation !== null ||
+    radius !== defaultRadiusKm ||
+    searchParams.toString() !== "";
+
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setLocationQuery("");
+    setSelectedSubjects([]);
+    setSelectedMode("All");
+    setRadius(defaultRadiusKm);
+    setUserLocation(null);
+    setLocationName("");
+    setHasCrawled(false);
+    // Drop the ?q=&address=&lat=&lng= params so the URL no longer filters.
+    router.push("/centres");
+  };
+
   const handleGetLocation = () => {
     setIsLocating(true);
     setLocationError("");
@@ -218,10 +261,13 @@ export default function CentresListClient({ initialCentres, savedCentreIds = [] 
       });
     }
 
-    // 2. Subjects Filter
+    // 2. Subjects Filter — every ticked subject must be offered (AND, not OR).
+    //    Ticking "Physics" and "Chemistry" asks for a centre teaching both; the
+    //    previous `.some()` widened the results with each extra tick, so adding
+    //    a requirement made the list longer, which is the opposite of a filter.
     if (selectedSubjects.length > 0) {
-      result = result.filter(c => 
-        selectedSubjects.some(sub => c.subjects?.includes(sub))
+      result = result.filter(c =>
+        selectedSubjects.every(sub => c.subjects?.includes(sub))
       );
     }
 
@@ -230,21 +276,10 @@ export default function CentresListClient({ initialCentres, savedCentreIds = [] 
       result = result.filter(c => c.mode?.toLowerCase() === selectedMode.toLowerCase());
     }
 
-    // 4. Max Fee Filter — only when the parent has actually set a budget below
-    //    the maximum. At FEE_MAX the filter is off, so nothing is hidden by default.
-    if (maxFee < FEE_MAX) {
-      result = result.filter(c => {
-        if (!c.price) return true; // If no price listed, keep it
-        const priceStr = c.price.toString().replace(/[^0-9-]/g, '');
-        const parts = priceStr.split('-');
-        // Compare the starting (lowest) price against the budget.
-        const priceVal = parseInt(parts[0], 10);
-        if (!isNaN(priceVal)) {
-          return priceVal <= maxFee;
-        }
-        return true; // Non-numeric prices (e.g. "Contact for pricing") are kept.
-      });
-    }
+    // (A max-fee filter used to sit here. It was removed: 370 of 373 centres
+    //  hold the placeholder "Contact for pricing", and the filter kept every
+    //  non-numeric price, so it could never exclude anything. See the price
+    //  capture limitation in the report.)
 
     // 4. Location Radius & Distance
     if (userLocation) {
@@ -288,7 +323,7 @@ export default function CentresListClient({ initialCentres, savedCentreIds = [] 
     }
 
     return result;
-  }, [allCentres, userLocation, radius, searchQuery, selectedSubjects, selectedMode, maxFee, sortOrder]);
+  }, [allCentres, userLocation, radius, searchQuery, selectedSubjects, selectedMode, sortOrder]);
 
   // Trigger auto-crawl if 0 results
   useEffect(() => {
@@ -494,36 +529,61 @@ export default function CentresListClient({ initialCentres, savedCentreIds = [] 
           {/* Sidebar Filters */}
           <div className="w-full lg:w-64 space-y-8">
             <div>
-              <h3 className="font-heading font-semibold text-lg mb-4 dark:text-white">Filters</h3>
-              
-              <div className="space-y-6">
-                {/* Radius Filter */}
-                {userLocation && (
-                  <div className="space-y-4 p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-medium text-indigo-900 dark:text-indigo-400 flex items-center">
-                        <Navigation className="w-4 h-4 mr-1.5" /> Search Radius
-                      </h4>
-                      <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-md">{radius} km</span>
-                    </div>
-                    <Slider 
-                      value={[radius]} 
-                      onValueChange={(val) => setRadius(Array.isArray(val) ? val[0] : val)} 
-                      max={100} 
-                      min={1}
-                      step={1} 
-                      className="w-full" 
-                    />
-                    <div className="flex justify-between text-xs text-slate-500 font-medium">
-                      <span>1km</span>
-                      <span>100km</span>
-                    </div>
-                  </div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-heading font-semibold text-lg dark:text-white">Filters</h3>
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearAllFilters}
+                    className="h-8 px-2 text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-900/30"
+                  >
+                    <X className="w-3.5 h-3.5 mr-1" />
+                    Clear filters
+                  </Button>
                 )}
+              </div>
+
+              <div className="space-y-6">
+                {/* Distance — needs an origin, so it explains itself when there isn't one
+                    rather than vanishing, which left no sign the filter existed at all. */}
+                <div className="space-y-4 p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-medium text-indigo-900 dark:text-indigo-400 flex items-center">
+                      <Navigation className="w-4 h-4 mr-1.5" /> Distance
+                    </h4>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${userLocation ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30" : "text-slate-400 bg-slate-100 dark:bg-slate-800"}`}>
+                      {radius} km
+                    </span>
+                  </div>
+                  <Slider
+                    value={[radius]}
+                    onValueChange={(val) => setRadius(Array.isArray(val) ? val[0] : val)}
+                    max={100}
+                    min={1}
+                    step={1}
+                    disabled={!userLocation}
+                    className={`w-full ${userLocation ? "" : "opacity-50"}`}
+                  />
+                  <div className="flex justify-between text-xs text-slate-500 font-medium">
+                    <span>1km</span>
+                    <span>100km</span>
+                  </div>
+                  {!userLocation && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Pick a location from the search box or tap <strong>GPS</strong> to filter by distance.
+                    </p>
+                  )}
+                </div>
 
                 {/* Subjects */}
                 <div className="space-y-3">
                   <h4 className="text-sm font-medium text-slate-900 dark:text-white">Subjects</h4>
+                  {selectedSubjects.length > 1 && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Showing centres that teach <strong>all {selectedSubjects.length}</strong> selected subjects.
+                    </p>
+                  )}
                   {dynamicSubjects.map(subject => (
                     <label key={subject} className="flex items-center gap-3 cursor-pointer group">
                       <div className="w-5 h-5 rounded border border-slate-300 dark:border-slate-600 group-hover:border-indigo-500 flex items-center justify-center transition-colors">
@@ -566,15 +626,17 @@ export default function CentresListClient({ initialCentres, savedCentreIds = [] 
                   ))}
                 </div>
 
-                {/* Price Range */}
-                <div className="space-y-4">
-                  <h4 className="text-sm font-medium text-slate-900 dark:text-white">Max Monthly Fee</h4>
-                  <Slider value={[maxFee]} onValueChange={(val) => setMaxFee(Array.isArray(val) ? val[0] : val)} max={500} step={10} className="w-full" />
-                  <div className="flex justify-between text-xs text-slate-500 font-medium">
-                    <span>RM 0</span>
-                    <span>RM {maxFee}</span>
-                  </div>
-                </div>
+                {/*
+                  A "Max Monthly Fee" slider stood here. It was removed rather
+                  than fixed: 370 of 373 centres carry the placeholder "Contact
+                  for pricing" because neither the Google Places path nor the
+                  Scrapy path captures a fee, so the control had nothing to
+                  filter on and silently kept every unpriced centre. Shipping a
+                  slider that cannot change the results is worse than not
+                  offering one. The priceRange field and the AI website sync
+                  that populates it are untouched; the coverage gap is written
+                  up as a limitation instead.
+                */}
               </div>
             </div>
           </div>
@@ -609,19 +671,7 @@ export default function CentresListClient({ initialCentres, savedCentreIds = [] 
               <div className="text-center py-16 text-slate-500 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm mb-8">
                 <p className="text-lg font-medium text-slate-900 dark:text-white mb-4">No centres found matching your exact criteria.</p>
                 <Button
-                  onClick={() => {
-                    setSearchQuery("");
-                    setLocationQuery("");
-                    setSelectedSubjects([]);
-                    setSelectedMode("All");
-                    setMaxFee(FEE_MAX);
-                    setRadius(50);
-                    setUserLocation(null);
-                    setLocationName("");
-                    setHasCrawled(false);
-                    // Drop the ?q=&address=&lat=&lng= params so the URL no longer filters.
-                    router.push("/centres");
-                  }}
+                  onClick={clearAllFilters}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md"
                 >
                   Clear All Filters
@@ -639,23 +689,22 @@ export default function CentresListClient({ initialCentres, savedCentreIds = [] 
                   >
                     <div className="flex flex-col items-start gap-1.5">
                       {/*
-                        The rating is attributed on the card itself. For a
-                        crawled centre these are Google's aggregates, and an
-                        unlabelled "4.9 (434 reviews)" on a TutorMatch listing
-                        reads as TutorMatch's own score.
+                        The rating is attributed on the card itself, and the star
+                        is coloured by source (amber = Google, indigo =
+                        TutorMatch). For a crawled centre these are Google's
+                        aggregates, and an unlabelled "4.9 (434 reviews)" on a
+                        TutorMatch listing reads as TutorMatch's own score.
+                        Colour is never the only cue — the label is always there.
                       */}
-                      <Badge className="bg-white/90 text-slate-900 hover:bg-white border-none font-bold shadow-sm backdrop-blur-md">
-                        <Star className="w-3.5 h-3.5 text-yellow-500 mr-1 fill-yellow-500" />
-                        {centre.rating > 0 || centre.reviews > 0
-                          ? `${Number(centre.rating || 0).toFixed(1)} (${centre.reviews} reviews)${
-                              centre.ratingSource === "google"
-                                ? " · Google"
-                                : centre.ratingSource === "tutormatch"
-                                  ? " · TutorMatch"
-                                  : ""
-                            }`
-                          : "New"}
-                      </Badge>
+                      {(() => {
+                        const r = resolveRating(centre.rating, centre.reviews, centre.ratingSource);
+                        return (
+                          <Badge className="bg-white/90 text-slate-900 hover:bg-white border-none font-bold shadow-sm backdrop-blur-md">
+                            <Star className={`w-3.5 h-3.5 mr-1 ${r.starClass}`} />
+                            {r.hasRating ? formatRatingSummary(r) : "New"}
+                          </Badge>
+                        );
+                      })()}
                       {centre.isVerified && (
                         <Badge className="bg-emerald-500/90 text-white hover:bg-emerald-500 border-none font-semibold shadow-sm backdrop-blur-md">
                           <ShieldCheck className="w-3.5 h-3.5 mr-1" />
@@ -711,9 +760,14 @@ export default function CentresListClient({ initialCentres, savedCentreIds = [] 
                   
                   <CardFooter className="border-t border-slate-100 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between">
                     <div>
-                      <div className="text-lg font-bold text-slate-900 dark:text-white">{centre.price}</div>
-                      <div className="text-xs text-slate-500 flex items-center mt-0.5">
-                        <Clock className="w-3.5 h-3.5 mr-1" />
+                      {/*
+                        The "starting price" line that stood here read
+                        "Contact for pricing" on 370 of 373 centres — a headline
+                        slot spent on a placeholder. Teaching mode is something
+                        we actually know, so it takes the space.
+                      */}
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white flex items-center">
+                        <Clock className="w-3.5 h-3.5 mr-1.5 text-slate-400" />
                         {centre.mode === TEACHING_MODE_UNKNOWN
                           ? "Mode not specified"
                           : `${centre.mode} Mode`}

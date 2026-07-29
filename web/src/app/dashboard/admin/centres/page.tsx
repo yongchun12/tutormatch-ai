@@ -15,9 +15,11 @@ import { ActionModal } from "@/components/ui/action-modal";
 import { BulkApproveButton } from "@/components/admin/BulkApproveButton";
 import { formatLocation } from "@/lib/centre-display";
 import { getEnrichmentStats } from "@/services/qualityGateService";
+import { AdminSearch } from "@/components/admin/AdminSearch";
+import { escapeRegex } from "@/lib/utils";
 
 export default async function ManageCentres(props: {
-    searchParams: Promise<{ page?: string }>
+    searchParams: Promise<{ page?: string; q?: string }>
 }) {
     const searchParams = await props.searchParams;
     const session = await getServerSession(authOptions);
@@ -31,8 +33,24 @@ export default async function ManageCentres(props: {
     const limit = 10;
     const skip = (page - 1) * limit;
 
-    // Fetch centres with pagination
-    const total = await TuitionCentre.countDocuments();
+    // Search runs in the query, not over the current page — the list is
+    // paginated, so filtering client-side would only search the ten visible rows.
+    const q = (searchParams.q || "").trim();
+    const filter = q
+        ? {
+              $or: [
+                  { name: { $regex: escapeRegex(q), $options: "i" } },
+                  { city: { $regex: escapeRegex(q), $options: "i" } },
+                  { state: { $regex: escapeRegex(q), $options: "i" } },
+                  { address: { $regex: escapeRegex(q), $options: "i" } },
+                  { status: { $regex: escapeRegex(q), $options: "i" } },
+              ],
+          }
+        : {};
+
+    const total = await TuitionCentre.countDocuments(filter);
+    // Deliberately unfiltered: this drives the "approve all pending" button,
+    // which acts on the whole queue regardless of what is being searched for.
     const pendingCount = await TuitionCentre.countDocuments({ status: "pending" });
 
     // Listings that are real and published but still incomplete. These are NOT
@@ -53,7 +71,7 @@ export default async function ManageCentres(props: {
         .limit(25)
         .lean();
     const enrichment = await getEnrichmentStats();
-    const allCentres = await TuitionCentre.find({})
+    const allCentres = await TuitionCentre.find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -157,6 +175,15 @@ export default async function ManageCentres(props: {
                 </Card>
             )}
 
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <AdminSearch placeholder="Search name, city, state or status…" />
+                <span className="text-sm text-slate-500 dark:text-slate-400">
+                    {q
+                        ? `${total} ${total === 1 ? "match" : "matches"} for “${q}”`
+                        : `${total} ${total === 1 ? "centre" : "centres"}`}
+                </span>
+            </div>
+
             <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm">
                 <CardContent className="p-0">
                     <div className="overflow-x-auto">
@@ -240,7 +267,7 @@ export default async function ManageCentres(props: {
                                 {allCentres.length === 0 && (
                                     <tr>
                                         <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
-                                            No centres found in the database.
+                                            {q ? `No centres match “${q}”.` : "No centres found in the database."}
                                         </td>
                                     </tr>
                                 )}

@@ -68,7 +68,7 @@ def main():
     api_key = os.getenv("GOOGLE_MAPS_API_KEY")
     client = pymongo.MongoClient(os.getenv("MONGODB_URI"), serverSelectionTimeoutMS=60000,
                                  connectTimeoutMS=60000, socketTimeoutMS=60000, retryWrites=True)
-    col = client["test"]["tuitioncentres"]
+    col = client[os.getenv("MONGODB_DB", "test")]["tuitioncentres"]
 
     rows = list(col.find({"discoverySource": "directory"}).sort("name", 1))
     print(f"{'APPLYING' if args.apply else 'DRY RUN'} — {len(rows)} directory records\n")

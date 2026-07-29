@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MessageSquare, Star, Trash2 } from "lucide-react";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { ActionModal } from "@/components/ui/action-modal";
 import { adminDeleteReviewAction } from "./actions";
 
 export default async function AdminReviewsPage(props: {
@@ -112,14 +113,35 @@ export default async function AdminReviewsPage(props: {
                                             )}
                                         </td>
                                         <td className="px-6 py-4 text-right align-top">
-                                            <form action={async (formData) => {
-                                                "use server";
-                                                await adminDeleteReviewAction(review._id.toString(), formData);
-                                            }}>
-                                                <Button type="submit" size="sm" variant="outline" className="h-8 px-2 text-rose-500 border-rose-200 hover:bg-rose-50 dark:border-rose-900/50 dark:hover:bg-rose-950/30">
-                                                    <Trash2 className="w-4 h-4 mr-1" /> Delete
-                                                </Button>
-                                            </form>
+                                            {/*
+                                              This was a bare submit button: one click deleted the
+                                              review, with nothing in between and no way back. Two
+                                              real reviews were lost that way during testing. Every
+                                              other destructive action in the admin area already went
+                                              through ActionModal; this one had been missed.
+
+                                              The confirmation names the centre and quotes the review,
+                                              so the thing being destroyed is identified rather than
+                                              just counted.
+                                            */}
+                                            <ActionModal
+                                                triggerBtn={
+                                                    <Button size="sm" variant="outline" className="h-8 px-2 text-rose-500 border-rose-200 hover:bg-rose-50 dark:border-rose-900/50 dark:hover:bg-rose-950/30">
+                                                        <Trash2 className="w-4 h-4 mr-1" /> Delete
+                                                    </Button>
+                                                }
+                                                title="Delete this review?"
+                                                description={
+                                                    `This permanently deletes the ${review.rating}-star review` +
+                                                    `${review.centreId?.name ? ` for ${review.centreId.name}` : ""}` +
+                                                    `${review.userId?.name ? ` by ${review.userId.name}` : ""}` +
+                                                    `${review.comment ? `: "${String(review.comment).slice(0, 120)}${String(review.comment).length > 120 ? "…" : ""}"` : ""}` +
+                                                    `. The centre's rating will be recalculated. This cannot be undone.`
+                                                }
+                                                confirmBtnText="Yes, delete review"
+                                                confirmBtnVariant="destructive"
+                                                action={adminDeleteReviewAction.bind(null, review._id.toString())}
+                                            />
                                         </td>
                                     </tr>
                                 ))}
