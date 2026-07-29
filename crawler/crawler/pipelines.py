@@ -286,11 +286,7 @@ class MongoPipeline:
     def from_crawler(cls, crawler):
         return cls(
             mongo_uri=os.getenv('MONGODB_URI', 'mongodb://localhost:27017/tuition_db'),
-            # Honours MONGODB_DB so a crawl can be pointed at a disposable
-            # database. Without this the spider wrote to the real "test"
-            # database no matter how the web app was configured, so testing the
-            # crawler meant mutating the data the results chapter depends on.
-            mongo_db=os.getenv('MONGODB_DB', 'test'),
+            mongo_db='test' # The default DB name if not specified in URI
         )
 
     def open_spider(self, spider):
@@ -301,10 +297,8 @@ class MongoPipeline:
         self.client.close()
 
     def process_item(self, item, spider):
-        # 1. We have the scraped item from Scrapy
         name = item.get('name')
 
-        # 2. Call Google Maps API to enrich
         api_key = os.getenv('GOOGLE_MAPS_API_KEY')
         if api_key and name:
             try:
