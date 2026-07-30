@@ -26,12 +26,16 @@ import {
 /** Where a decision was made, so decisions can be grouped by crawl path. */
 export type GateContext =
   | "cron"
+  | "admin-manual"
   | "scraper-service"
   | "ondemand-crawl"
   | "chat-discovery";
 
 const CONTEXT_LABELS: Record<GateContext, string> = {
   cron: "Scheduled crawl",
+  // A crawl an admin started with the "Search now" button. Recorded separately
+  // from "cron" so a manually triggered run is never counted as a scheduled one.
+  "admin-manual": "Manual crawl",
   "scraper-service": "Admin scrape",
   "ondemand-crawl": "On-demand crawl",
   "chat-discovery": "AI advisor discovery",
@@ -192,6 +196,50 @@ export interface EnrichmentStats {
 }
 
 /**
+ * Every incomplete listing, rejected ones excluded.
+ *
+ * Exported so the admin "Missing details" page selects exactly the same records
+ * these counts describe. When the page had its own copy of this query, a tile
+ * reading "26" could sit above a list of 25 filtered slightly differently, and
+ * there was no way to tell which one was wrong.
+ */
+export const INCOMPLETE_BASE = {
+  needsEnrichment: true,
+  status: { $ne: "rejected" },
+} as const;
+
+/**
+ * One filter per thing a listing can be short of, keyed by EnrichmentReason.
+ *
+ * These mirror `enrichmentReasons()` in lib/quality-gate.ts, which is the pure
+ * rule; these are the MongoDB translations of it. Both must agree — the gate
+ * decides the flag, and these find the records the flag was set on.
+ */
+export const MISSING_FILTERS: Record<EnrichmentReason, Record<string, unknown>> = {
+  "no-subjects": {
+    $or: [{ subjects: { $exists: false } }, { subjects: { $size: 0 } }],
+  },
+  "no-coordinates": {
+    $or: [
+      { latitude: { $in: [null, undefined] } },
+      { longitude: { $in: [null, undefined] } },
+    ],
+  },
+  "not-confirmed-by-google": {
+    $and: [
+      {
+        $or: [
+          { googlePlaceId: { $exists: false } },
+          { googlePlaceId: null },
+          { googlePlaceId: "" },
+        ],
+      },
+      { discoverySource: { $ne: "google-places" } },
+    ],
+  },
+};
+
+/**
  * Count incomplete listings from the centres themselves, not from GateDecision.
  *
  * GateDecision records what was true at the moment a record was crawled; it is
@@ -201,34 +249,11 @@ export interface EnrichmentStats {
  * what an admin queue needs.
  */
 export async function getEnrichmentStats(): Promise<EnrichmentStats> {
-  const notRejected = { needsEnrichment: true, status: { $ne: "rejected" } } as const;
-
   const [total, noSubjects, noCoordinates, notConfirmed] = await Promise.all([
-    TuitionCentre.countDocuments(notRejected),
-    TuitionCentre.countDocuments({
-      ...notRejected,
-      $or: [{ subjects: { $exists: false } }, { subjects: { $size: 0 } }],
-    }),
-    TuitionCentre.countDocuments({
-      ...notRejected,
-      $or: [
-        { latitude: { $in: [null, undefined] } },
-        { longitude: { $in: [null, undefined] } },
-      ],
-    }),
-    TuitionCentre.countDocuments({
-      ...notRejected,
-      $and: [
-        {
-          $or: [
-            { googlePlaceId: { $exists: false } },
-            { googlePlaceId: null },
-            { googlePlaceId: "" },
-          ],
-        },
-        { discoverySource: { $ne: "google-places" } },
-      ],
-    }),
+    TuitionCentre.countDocuments(INCOMPLETE_BASE),
+    TuitionCentre.countDocuments({ ...INCOMPLETE_BASE, ...MISSING_FILTERS["no-subjects"] }),
+    TuitionCentre.countDocuments({ ...INCOMPLETE_BASE, ...MISSING_FILTERS["no-coordinates"] }),
+    TuitionCentre.countDocuments({ ...INCOMPLETE_BASE, ...MISSING_FILTERS["not-confirmed-by-google"] }),
   ]);
 
   const byReason: EnrichmentStats["byReason"] = (

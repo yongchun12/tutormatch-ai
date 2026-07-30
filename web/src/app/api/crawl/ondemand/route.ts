@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
-import { SystemLog } from "@/models/SystemLog";
 import { requireAdmin, authorizationErrorResponse } from "@/lib/authz";
 import { applyQualityGate } from "@/services/qualityGateService";
 import { parseMalaysianAddress } from "@/lib/address";
@@ -76,11 +75,7 @@ export async function GET(req: NextRequest) {
     // 1. Connect to DB
     await dbConnect();
 
-    await SystemLog.create({
-      level: "INFO",
-      source: "CRAWLER",
-      message: `Manual ondemand scrape started for address: ${address}`
-    });
+    console.log("[ondemand]", `Manual ondemand scrape started for address: ${address}`);
 
     // 2. Query Google Places API (Text Search)
     const query = `tuition centre in ${address}`;
@@ -90,11 +85,7 @@ export async function GET(req: NextRequest) {
     const data = await response.json();
 
     if (data.status !== "OK" || !data.results) {
-      await SystemLog.create({
-        level: "WARN",
-        source: "CRAWLER",
-        message: `No results found for manual scrape: ${address}`
-      });
+      console.warn("[ondemand]", `No results found for manual scrape: ${address}`);
       return NextResponse.json({ 
         message: "No results from Google Maps", 
         results: [],
@@ -256,11 +247,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    await SystemLog.create({
-      level: "SUCCESS",
-      source: "CRAWLER",
-      message: `Manual scrape for ${address} complete. Discovered/Updated ${newCentres.length} centres.`
-    });
+    console.log("[ondemand]", `Manual scrape for ${address} complete. Discovered/Updated ${newCentres.length} centres.`);
 
     return NextResponse.json({ 
       message: "Successfully crawled and updated",
@@ -274,11 +261,7 @@ export async function GET(req: NextRequest) {
 
     console.error("Crawl Error:", error);
     try {
-      await SystemLog.create({
-        level: "ERROR",
-        source: "CRAWLER",
-        message: `Manual scrape failed: ${error.message || "Internal Error"}`
-      });
+      console.error("[ondemand]", `Manual scrape failed: ${error.message || "Internal Error"}`);
     } catch (e) {}
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }

@@ -11,20 +11,24 @@ export default function ScrapeButton() {
   const handleScrape = async () => {
     setLoading(true)
     setIsError(false)
-    setMessage("Scraping live from Google Maps...")
+    setMessage("Searching Google Maps…")
     try {
       const res = await fetch("/api/admin/scrape")
       const data = await res.json()
       if(data.success) {
         setIsError(false)
-        setMessage(`Success! Fetched ${data.stats.totalFetched} | Inserted ${data.stats.inserted} | Updated ${data.stats.updated}`)
+        const { totalFetched = 0, inserted = 0, updated = 0 } = data.stats ?? {}
+        setMessage(
+          `Done. Looked at ${totalFetched} centre${totalFetched === 1 ? "" : "s"} on Google Maps: ` +
+          `${inserted} new one${inserted === 1 ? "" : "s"} added, ${updated} existing one${updated === 1 ? "" : "s"} updated.`
+        )
       } else {
         setIsError(true)
-        setMessage(`Scrape failed: ${data.error || "Unknown error"}. This is often a transient Google Places hiccup — please try again.`)
+        setMessage(`Search failed: ${data.error || "unknown error"}. This is usually a temporary Google Maps problem — please try again in a moment.`)
       }
     } catch(e) {
       setIsError(true)
-      setMessage("Couldn't reach the scraper. Check your connection and try again.")
+      setMessage("Could not reach the search service. Check your connection and try again.")
     }
     setLoading(false)
   }
@@ -37,7 +41,7 @@ export default function ScrapeButton() {
         className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-xl shadow-indigo-600/20 font-bold px-6 rounded-xl h-11 transition-all"
       >
         {loading ? <RefreshCw className="w-5 h-5 mr-2 animate-spin" /> : <Globe className="w-5 h-5 mr-2" />}
-        {loading ? "Scraping in progress..." : "Trigger Google Maps Scraper"}
+        {loading ? "Searching…" : "Search Google Maps now"}
       </Button>
       {message && (
         <div className={`flex items-center text-sm font-medium px-3 py-1.5 rounded-lg border max-w-sm ${
@@ -51,9 +55,16 @@ export default function ScrapeButton() {
           {message}
         </div>
       )}
+      {/*
+        The second line here used to read "To run the Data Pipeline on your
+        machine, execute `python fallback_pipeline.py` in the crawler folder."
+        No such file exists anywhere in the repository, so it was an instruction
+        that could only ever fail. The directory-website crawl is a separate
+        Scrapy spider, and it is not something this button starts.
+      */}
       <p className="text-xs text-slate-400 text-right max-w-sm mt-1">
-        This button runs the standard Google Maps API sync. <br/>
-        To run the <strong>Data Pipeline</strong> on your machine, execute <code>python fallback_pipeline.py</code> in the crawler folder.
+        Looks up tuition centres on Google Maps and adds any that are new.
+        Safe to press more than once — centres already in the directory are skipped.
       </p>
     </div>
   )

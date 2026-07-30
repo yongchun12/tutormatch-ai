@@ -271,7 +271,7 @@ export function shouldAutoPublish(centre: GateInput): GateResult {
   };
 }
 
-/** One-line summary of a decision, used as the SystemLog message. */
+/** One-line, human-readable summary of a decision, for logs and the admin queue. */
 export function describeGateDecision(name: string, result: GateResult): string {
   if (result.autoPublish) {
     if (result.waivedCriteria.length > 0) {

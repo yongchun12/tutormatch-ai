@@ -37,7 +37,7 @@ export default function RegatePanel() {
       try {
         setPreview(await previewRegateAction());
       } catch {
-        setError("Couldn't work out what a re-gate would do. Please try again.");
+        setError("Could not work out what would change. Please try again.");
       }
     });
   };
@@ -52,7 +52,7 @@ export default function RegatePanel() {
         setConfirmOpen(false);
         router.refresh();
       } catch {
-        setError("The re-gate did not complete. No decisions were removed — re-run the preview to see the current state.");
+        setError("The re-check did not finish. Nothing was deleted — press “See what would change” again to check the current state.");
         setConfirmOpen(false);
       }
     });
@@ -65,12 +65,13 @@ export default function RegatePanel() {
           <div>
             <CardTitle className="font-heading text-lg flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-indigo-500" />
-              Re-apply the quality gate
+              Re-check centres already saved
             </CardTitle>
             <CardDescription className="max-w-2xl">
-              Judges every saved centre against the gate as it stands today. Useful after a
-              rule change — a record crawled under older rules keeps whatever the gate
-              decided at the time.
+              Runs today&apos;s checks over every centre in the directory. Worth doing if the
+              checks have been changed since: a centre found earlier keeps whatever answer
+              it was given at the time, so some may be waiting for approval for a reason
+              that no longer applies.
             </CardDescription>
           </div>
           <Button
@@ -80,7 +81,7 @@ export default function RegatePanel() {
             className="rounded-xl shrink-0"
           >
             {isPreviewing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-            {isPreviewing ? "Checking…" : "Preview changes"}
+            {isPreviewing ? "Checking…" : "See what would change"}
           </Button>
         </div>
       </CardHeader>
@@ -90,10 +91,9 @@ export default function RegatePanel() {
         <p className="text-sm text-slate-600 dark:text-slate-400 flex items-start gap-2 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 p-4">
           <Archive className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
           <span>
-            Existing gate decisions are never edited or deleted. A re-gate <strong>adds</strong>{" "}
-            new decisions under the <code className="text-xs px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-800">admin-regate</code>{" "}
-            context, each one linked to the decision it revises. What the gate decided during
-            the crawl stays on record and stays countable.
+            Nothing already on record is changed or deleted. Re-checking <strong>adds</strong> a
+            fresh result alongside the old one, and notes which earlier result it replaces. The
+            original answer from the day the centre was found is kept permanently.
           </span>
         </p>
 
@@ -107,14 +107,14 @@ export default function RegatePanel() {
         {result && (
           <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 p-4 text-sm text-emerald-800 dark:text-emerald-300">
             <p className="font-semibold flex items-center gap-2 mb-2">
-              <CheckCircle2 className="w-4 h-4" /> Re-gate complete
+              <CheckCircle2 className="w-4 h-4" /> Re-check finished
             </p>
             <ul className="space-y-1 leading-relaxed">
-              <li>{result.examined} centres examined</li>
-              <li>{result.decisionsAppended} new decisions appended</li>
-              <li>{result.promoted} centres promoted from pending to approved</li>
-              <li>{result.enrichmentFlagsUpdated} enrichment flags brought up to date</li>
-              <li className="font-medium">{result.decisionsOverwritten} existing decisions overwritten</li>
+              <li>{result.examined} centres re-checked</li>
+              <li>{result.decisionsAppended} new results added to the record</li>
+              <li>{result.promoted} centres moved from waiting to published</li>
+              <li>{result.enrichmentFlagsUpdated} &ldquo;missing details&rdquo; marks corrected</li>
+              <li className="font-medium">{result.decisionsOverwritten} old results overwritten</li>
             </ul>
           </div>
         )}
@@ -123,10 +123,10 @@ export default function RegatePanel() {
           <div className="space-y-5">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { label: "Examined", value: preview.examined },
-                { label: "Would publish", value: preview.wouldPublish },
-                { label: "Would hold", value: preview.wouldHold },
-                { label: "New decisions", value: preview.decisionsToAppend },
+                { label: "Centres re-checked", value: preview.examined },
+                { label: "Would be published", value: preview.wouldPublish },
+                { label: "Would wait for approval", value: preview.wouldHold },
+                { label: "New results recorded", value: preview.decisionsToAppend },
               ].map((tile) => (
                 <div key={tile.label} className="rounded-2xl border border-slate-200 dark:border-slate-800 p-4">
                   <p className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">{tile.value}</p>
@@ -138,28 +138,29 @@ export default function RegatePanel() {
             <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-1.5">
               <li>
                 <strong className="text-slate-900 dark:text-white">{preview.wouldPromote}</strong>{" "}
-                pending centre{preview.wouldPromote === 1 ? "" : "s"} would be published.
+                centre{preview.wouldPromote === 1 ? "" : "s"} currently waiting would go live.
               </li>
               <li>
                 <strong className="text-slate-900 dark:text-white">{preview.enrichmentFlagChanges}</strong>{" "}
-                enrichment flag{preview.enrichmentFlagChanges === 1 ? "" : "s"} would be corrected.
+                &ldquo;missing details&rdquo; mark{preview.enrichmentFlagChanges === 1 ? "" : "s"} would be corrected.
               </li>
               {preview.wouldDemoteButWontTouch > 0 && (
                 <li className="text-amber-700 dark:text-amber-400">
-                  {preview.wouldDemoteButWontTouch} approved centre
-                  {preview.wouldDemoteButWontTouch === 1 ? "" : "s"} would fail today&apos;s rules, but
-                  will <strong>not</strong> be demoted — an admin may have approved them by hand.
+                  {preview.wouldDemoteButWontTouch} live centre
+                  {preview.wouldDemoteButWontTouch === 1 ? "" : "s"} would fail today&apos;s checks, but
+                  will <strong>not</strong> be taken down — someone may have approved them
+                  deliberately, and that decision is respected.
                 </li>
               )}
               <li className="text-slate-500">
-                Decisions currently on record: {preview.existingDecisions} — all of them kept.
+                {preview.existingDecisions} results already on record — every one of them kept.
               </li>
             </ul>
 
             {preview.waiversByCriterion.length > 0 && (
               <div>
                 <p className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
-                  Waivers that would be applied
+                  Checks that would be skipped
                 </p>
                 <ul className="divide-y divide-slate-100 dark:divide-slate-800">
                   {preview.waiversByCriterion.map((row) => (
@@ -175,7 +176,7 @@ export default function RegatePanel() {
             {preview.holdsByCriterion.length > 0 && (
               <div>
                 <p className="text-sm font-semibold text-slate-900 dark:text-white mb-2">
-                  Holds that would be recorded
+                  Reasons centres would wait for approval
                 </p>
                 <ul className="divide-y divide-slate-100 dark:divide-slate-800">
                   {preview.holdsByCriterion.map((row) => (
@@ -194,10 +195,10 @@ export default function RegatePanel() {
                 disabled={isApplying}
                 className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white"
               >
-                Commit re-gate
+                Apply these changes
               </Button>
               <Button variant="outline" onClick={() => setPreview(null)} disabled={isApplying} className="rounded-xl">
-                Discard preview
+                Cancel
               </Button>
             </div>
           </div>
@@ -205,7 +206,7 @@ export default function RegatePanel() {
 
         {!preview && !result && !isPreviewing && (
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Run a preview to see what would change. Nothing is written until you confirm.
+            Press <strong>See what would change</strong> first. Nothing is saved until you confirm.
           </p>
         )}
       </CardContent>
@@ -213,19 +214,19 @@ export default function RegatePanel() {
       <Dialog open={confirmOpen} onOpenChange={(next) => !isApplying && setConfirmOpen(next)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Commit the re-gate?</DialogTitle>
+            <DialogTitle>Apply these changes?</DialogTitle>
             <DialogDescription>
-              This appends {preview?.decisionsToAppend ?? 0} new gate decisions and promotes{" "}
-              {preview?.wouldPromote ?? 0} pending centre
-              {preview?.wouldPromote === 1 ? "" : "s"} to approved.
+              This records {preview?.decisionsToAppend ?? 0} new result
+              {preview?.decisionsToAppend === 1 ? "" : "s"} and puts{" "}
+              {preview?.wouldPromote ?? 0} waiting centre
+              {preview?.wouldPromote === 1 ? "" : "s"} live on the site.
             </DialogDescription>
           </DialogHeader>
 
           <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-            The {preview?.existingDecisions ?? 0} decisions already on record are left exactly as
-            they are. If you are reporting the crawl&apos;s own publish rate, filter decisions by
-            context — the re-gate rows are recorded separately as{" "}
-            <code className="text-xs px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800">admin-regate</code>.
+            The {preview?.existingDecisions ?? 0} results already on record are left exactly as
+            they are — nothing is deleted. The new results are filed separately, so the
+            original figures from each crawl can still be reported on their own.
           </p>
 
           <DialogFooter className="mt-4 gap-2 sm:gap-0 flex justify-end">

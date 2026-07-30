@@ -10,6 +10,7 @@ import { Slider } from "@/components/ui/slider";
 import { MapPin, Star, Clock, Search, Sparkles, Navigation, Map, X, ShieldCheck } from "lucide-react";
 import { TEACHING_MODE_UNKNOWN } from "@/lib/centre-display";
 import { resolveRating, formatRatingSummary } from "@/lib/rating-display";
+import { GoogleG } from "@/components/ui/google-g";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Loader2 } from "lucide-react";
 import CompareModal from "./CompareModal";
@@ -701,7 +702,8 @@ export default function CentresListClient({
                         return (
                           <Badge className="bg-white/90 text-slate-900 hover:bg-white border-none font-bold shadow-sm backdrop-blur-md">
                             <Star className={`w-3.5 h-3.5 mr-1 ${r.starClass}`} />
-                            {r.hasRating ? formatRatingSummary(r) : "New"}
+                            {r.hasRating ? formatRatingSummary(r, r.isGoogle) : "New"}
+                            {r.isGoogle && <GoogleG className="w-3.5 h-3.5 ml-1.5" />}
                           </Badge>
                         );
                       })()}

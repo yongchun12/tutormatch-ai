@@ -344,14 +344,15 @@ export default async function AdminDashboard() {
             </Card>
 
             {/*
-              The System Logs panel that stood here has moved out of the
-              dashboard. It is a live tail of the capped `systemlogs`
-              collection, which is written only while a crawl is running — so on
-              this page it was an empty box almost all of the time, competing for
-              attention with the queues that actually need acting on.
+              A "System Logs" panel stood here — a live tail of a capped
+              `systemlogs` collection, written only while a crawl was running, so
+              on this page it was an empty box almost all of the time.
 
-              The collection and the panel both still exist: the tail lives on
-              the Crawler & Gate Activity page, next to the crawl it describes.
+              The panel, the collection and the model behind them have all been
+              removed. Crawl progress and errors go to the server console, and the
+              outcome of the most recent run is shown on Finding New Centres. The
+              permanent record of what the crawler decided was never in there
+              anyway — that is `gatedecisions`, which is untouched.
             */}
           </div>
 

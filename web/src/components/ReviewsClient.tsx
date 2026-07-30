@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Star, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { GoogleG } from "@/components/ui/google-g";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 
@@ -210,14 +211,26 @@ export default function ReviewsClient({
                   <h4 className="font-bold text-slate-900 dark:text-white">{review.name}</h4>
                   <div className="flex">
                     {[...Array(5)].map((_, idx) => (
-                      <Star key={idx} className={`w-3.5 h-3.5 ${idx < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-300'}`} />
+                      <Star
+                        key={idx}
+                        className={`w-3.5 h-3.5 ${
+                          idx >= review.rating
+                            ? "text-slate-300 dark:text-slate-700"
+                            : review.source === "google"
+                              // Google Yellow — the shade Google fills its own stars with.
+                              ? "text-[#FBBC04] fill-[#FBBC04]"
+                              : "text-indigo-500 fill-indigo-500"
+                        }`}
+                      />
                     ))}
                   </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 mb-3">
-                  {/* Every review says where it came from. */}
-                  <Badge variant="outline" className={`text-xs ${SOURCE_BADGE[review.source]}`}>
+                  {/* Every review says where it came from — with the Google mark
+                      when it is Google's, so provenance survives greyscale. */}
+                  <Badge variant="outline" className={`text-xs inline-flex items-center gap-1 ${SOURCE_BADGE[review.source]}`}>
+                    {review.source === "google" && <GoogleG className="w-3 h-3" />}
                     {SOURCE_LABEL[review.source]}
                   </Badge>
 

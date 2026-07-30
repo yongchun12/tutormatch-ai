@@ -3,10 +3,10 @@ import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, Search, Database, Plus, Edit, BookOpen } from "lucide-react";
+import { CheckCircle2, XCircle, Database, Plus, Edit } from "lucide-react";
 import Link from "next/link";
 import { approveCentreAction, rejectCentreAction, deleteCentreAction } from "../actions";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -16,6 +16,7 @@ import { BulkApproveButton } from "@/components/admin/BulkApproveButton";
 import { formatLocation } from "@/lib/centre-display";
 import { getEnrichmentStats } from "@/services/qualityGateService";
 import { AdminSearch } from "@/components/admin/AdminSearch";
+import { CentreTabs } from "@/components/admin/CentreTabs";
 import { escapeRegex } from "@/lib/utils";
 
 export default async function ManageCentres(props: {
@@ -53,24 +54,12 @@ export default async function ManageCentres(props: {
     // which acts on the whole queue regardless of what is being searched for.
     const pendingCount = await TuitionCentre.countDocuments({ status: "pending" });
 
-    // Listings that are real and published but still incomplete. These are NOT
-    // held by the quality gate — a reviewer cannot know what a centre teaches,
-    // nor conjure coordinates — so they are surfaced here to be filled in or
-    // re-synced.
-    //
-    // `needsEnrichment` covers THREE gaps, not one: no subjects, no coordinates,
-    // or no Google Places match. This panel was titled "Listings missing
-    // subjects", which named only the first — so a centre that had subjects but
-    // no map pin appeared under a heading that flatly did not describe it.
-    const incompleteListings = await TuitionCentre.find({
-        needsEnrichment: true,
-        status: { $ne: "rejected" },
-    })
-        .select("name city state website subjects latitude longitude googlePlaceId discoverySource")
-        .sort({ createdAt: -1 })
-        .limit(25)
-        .lean();
+    // Just the count. The incomplete listings themselves now have their own page
+    // (centres/incomplete) — they used to be a 25-item list inside a large amber
+    // panel directly above this table, which asked the reader to hold two
+    // unrelated jobs in mind at once.
     const enrichment = await getEnrichmentStats();
+
     const allCentres = await TuitionCentre.find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -86,7 +75,9 @@ export default async function ManageCentres(props: {
                         <Database className="w-8 h-8 text-indigo-500" />
                         Manage Centres
                     </h1>
-                    <p className="text-slate-500 dark:text-slate-400">View, approve, reject, or delete tuition centres across the platform.</p>
+                    <p className="text-slate-500 dark:text-slate-400">
+                        Approve new centres, edit their information, or remove them from the directory.
+                    </p>
                 </div>
                 <div className="flex items-center gap-3">
                     <BulkApproveButton pendingCount={pendingCount} />
@@ -98,82 +89,7 @@ export default async function ManageCentres(props: {
                 </div>
             </div>
 
-            {enrichment.total > 0 && (
-                <Card className="rounded-3xl border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/20 shadow-sm">
-                    <CardHeader>
-                        <CardTitle className="font-heading text-lg flex items-center gap-2 text-amber-900 dark:text-amber-200">
-                            <BookOpen className="w-5 h-5" />
-                            Listings needing enrichment ({enrichment.total})
-                        </CardTitle>
-                        <CardDescription className="text-amber-700 dark:text-amber-400">
-                            These centres are published but incomplete. A listing can be short of
-                            more than one thing, so the counts below add up to more than the total.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {/* The breakdown the old single-reason title hid. */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-                            {enrichment.byReason.map((row) => (
-                                <div
-                                    key={row.reason}
-                                    className="rounded-2xl bg-white/70 dark:bg-slate-900/50 border border-amber-200/70 dark:border-amber-900/50 p-4"
-                                >
-                                    <p className="text-2xl font-bold text-amber-900 dark:text-amber-200 tabular-nums">
-                                        {row.count}
-                                    </p>
-                                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-1 leading-snug">
-                                        {row.label}
-                                    </p>
-                                </div>
-                            ))}
-                        </div>
-
-                        <ul className="divide-y divide-amber-200/60 dark:divide-amber-900/60">
-                            {incompleteListings.map((centre) => {
-                                // Say what THIS centre is short of, rather than
-                                // leaving the reader to assume it is subjects.
-                                const gaps: string[] = [];
-                                if (!centre.subjects?.length) gaps.push("no subjects");
-                                if (centre.latitude == null || centre.longitude == null) gaps.push("no coordinates");
-                                if (!centre.googlePlaceId && centre.discoverySource !== "google-places") {
-                                    gaps.push("not confirmed by Google");
-                                }
-
-                                return (
-                                    <li
-                                        key={centre._id.toString()}
-                                        className="py-3 flex items-center justify-between gap-4"
-                                    >
-                                        <div className="min-w-0">
-                                            <p className="font-medium text-slate-900 dark:text-white truncate">
-                                                {centre.name}
-                                            </p>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-                                                {[centre.city, centre.state].filter(Boolean).join(", ") || "Location unknown"}
-                                                {gaps.length > 0 && ` · ${gaps.join(", ")}`}
-                                                {!centre.website && " · no website to sync from"}
-                                            </p>
-                                        </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <SyncButton centreId={centre._id.toString()} hasWebsite={!!centre.website} />
-                                            <Link href={`/dashboard/admin/centres/${centre._id.toString()}/edit`}>
-                                                <Button variant="outline" size="sm" className="h-8 gap-1">
-                                                    <Edit className="w-3 h-3" /> Edit
-                                                </Button>
-                                            </Link>
-                                        </div>
-                                    </li>
-                                );
-                            })}
-                        </ul>
-                        {enrichment.total > incompleteListings.length && (
-                            <p className="text-xs text-amber-700 dark:text-amber-400 pt-3">
-                                Showing the {incompleteListings.length} most recent of {enrichment.total}.
-                            </p>
-                        )}
-                    </CardContent>
-                </Card>
-            )}
+            <CentreTabs incompleteCount={enrichment.total} pendingCount={pendingCount} />
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <AdminSearch placeholder="Search name, city, state or status…" />

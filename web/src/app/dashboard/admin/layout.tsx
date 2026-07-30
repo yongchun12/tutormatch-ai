@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { ShieldCheck, Activity, Database, Users, Globe, Star } from "lucide-react";
+import { ShieldCheck, Activity, Database, Users, Globe, Star, AlertCircle } from "lucide-react";
 import { SidebarLogoutButton } from "@/components/layout/SidebarLogoutButton";
 
 export default async function AdminLayout({
@@ -36,6 +36,11 @@ export default async function AdminLayout({
           <Link href="/dashboard/admin/centres" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
             <Database className="w-5 h-5" /> Manage Centres
           </Link>
+          {/* The second half of Manage Centres, given its own entry so it is
+              findable without first landing on the other page. */}
+          <Link href="/dashboard/admin/centres/incomplete" className="flex items-center gap-3 px-4 py-3 pl-11 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 text-sm font-medium transition-colors">
+            <AlertCircle className="w-4 h-4" /> Missing details
+          </Link>
           <Link href="/dashboard/admin/users" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
             <Users className="w-5 h-5" /> User Accounts
           </Link>
@@ -43,15 +48,19 @@ export default async function AdminLayout({
             One entry, replacing "AI Engine Status" and "Web Scraper Logs".
             Both of those rendered hardcoded metrics and invented log lines, and
             described a FastAPI microservice this system does not run.
+
+            Labelled "Finding New Centres" to match the page heading — it read
+            "Crawler & Gate Activity", which is the code's vocabulary rather than
+            anything an admin would recognise.
           */}
           <Link href="/dashboard/admin/crawler" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
-            <Globe className="w-5 h-5" /> Crawler &amp; Gate Activity
+            <Globe className="w-5 h-5" /> Finding New Centres
           </Link>
           <Link href="/dashboard/admin/reviews" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
-            <Star className="w-5 h-5" /> Moderation (Reviews)
+            <Star className="w-5 h-5" /> Reviews
           </Link>
           <Link href="/dashboard/admin/enquiries" className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-indigo-500/20 hover:text-indigo-400 font-medium transition-colors">
-            <Activity className="w-5 h-5" /> Enquiries List
+            <Activity className="w-5 h-5" /> Enquiries
           </Link>
         </nav>
         

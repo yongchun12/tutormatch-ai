@@ -3,14 +3,13 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 /**
  * One quality-gate decision: why a crawled centre was published or held.
  *
- * These live in their OWN collection rather than in SystemLog because SystemLog
- * is capped (1 MB / 1000 documents) — it is a rolling live feed for the admin
- * panel, so its oldest entries are overwritten without warning. That is fine
- * for a log tail and wrong for evidence: the counts behind the results chapter
- * would silently shrink as crawling continued.
- *
- * This collection is uncapped and indexed for the queries that produce those
- * counts.
+ * These live in their own collection, uncapped and indexed for the queries that
+ * produce the results-chapter counts. There was previously a rolling `systemlogs`
+ * feed as well, capped at 1 MB / 1000 documents, whose oldest entries were
+ * overwritten without warning — fine for a log tail, wrong for evidence, because
+ * the counts would silently shrink as crawling continued. That feed has since
+ * been removed entirely; this collection is now the only record of what the gate
+ * decided, which is exactly why it must never be capped or pruned.
  */
 export interface IGateDecision extends Document {
   /** "published" (auto-approved) or "held" (sent for admin review). */

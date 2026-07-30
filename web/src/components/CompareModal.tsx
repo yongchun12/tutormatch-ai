@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { MapPin, Star, Clock, CheckCircle2, Navigation, ShieldCheck, BookOpen } from "lucide-react";
 import { TEACHING_MODE_UNKNOWN } from "@/lib/centre-display";
 import { resolveRating } from "@/lib/rating-display";
+import { GoogleG } from "@/components/ui/google-g";
 
 interface CompareModalProps {
   isOpen: boolean;
@@ -97,7 +98,8 @@ export default function CompareModal({ isOpen, setIsOpen, centres }: CompareModa
                                 ({rating.count})
                               </span>
                             </span>
-                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border w-fit ${rating.badgeClass}`}>
+                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border w-fit inline-flex items-center gap-1 ${rating.badgeClass}`}>
+                              {rating.isGoogle && <GoogleG className="w-3 h-3" />}
                               {rating.sourceLabel}
                             </span>
                           </div>

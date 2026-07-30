@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Star, MapPin, Sparkles } from "lucide-react";
 import { formatLocation } from "@/lib/centre-display";
 import { resolveRating, type RatingSource } from "@/lib/rating-display";
+import { GoogleG } from "@/components/ui/google-g";
 import { wilsonLowerBound } from "@/lib/recommendation";
 
 interface RecommendedCentre {
@@ -217,7 +218,8 @@ export default async function RecommendationSection() {
                             <span className="text-xs text-slate-400 ml-1">
                               ({r.count} {r.count === 1 ? "review" : "reviews"})
                             </span>
-                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ml-auto ${r.badgeClass}`}>
+                            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ml-auto inline-flex items-center gap-1 ${r.badgeClass}`}>
+                              {r.isGoogle && <GoogleG className="w-3 h-3" />}
                               {r.sourceLabel}
                             </span>
                           </>

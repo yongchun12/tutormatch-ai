@@ -20,6 +20,7 @@ import ClaimCentreButtonWrapper from "@/components/ClaimCentreButtonWrapper";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { formatLocation, formatTeachingMode, TEACHING_MODE_UNKNOWN } from "@/lib/centre-display";
+import { GoogleG } from "@/components/ui/google-g";
 
 export default async function CentreDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params; // Must await params in Server Components
@@ -305,13 +306,26 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                   */}
                   {centre.reviews > 0 ? (
                     <>
-                      <Star className="w-4 h-4 text-yellow-400 fill-yellow-400 mr-1" />
+                      {/* Google Yellow (#FBBC04) for a Google rating — the exact shade
+                          Google fills its own review stars with — and indigo for a
+                          rating collected here. The badge carries the "G" mark so the
+                          source is stated, not just implied by a colour. */}
+                      <Star
+                        className={`w-4 h-4 mr-1 ${
+                          centre.ratingSource === "google"
+                            ? "text-[#FBBC04] fill-[#FBBC04]"
+                            : centre.ratingSource === "tutormatch"
+                              ? "text-indigo-400 fill-indigo-400"
+                              : "text-slate-300 fill-slate-300"
+                        }`}
+                      />
                       <span className="font-medium text-white">{centre.rating.toFixed(1)}</span>
                       <span className="ml-1 text-slate-300">
                         ({centre.reviews} review{centre.reviews === 1 ? "" : "s"})
                       </span>
                       {centre.ratingSource && (
-                        <Badge className="ml-2 bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-none text-[11px] font-medium">
+                        <Badge className="ml-2 bg-white/20 hover:bg-white/30 text-white backdrop-blur-md border-none text-[11px] font-medium inline-flex items-center gap-1">
+                          {centre.ratingSource === "google" && <GoogleG className="w-3 h-3" />}
                           {centre.ratingSource === "google" ? "from Google" : "from TutorMatch"}
                         </Badge>
                       )}

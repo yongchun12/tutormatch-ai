@@ -17,7 +17,8 @@
     "cron:test": "MONGODB_DB=tutormatch_test tsx scripts/local_cron.ts",
     "db:which": "tsx scripts/which_db.ts",
     "export:snapshot": "tsx scripts/export_snapshot.ts",
-    "figures": "tsx scripts/results_figures.ts"
+    "figures": "tsx scripts/results_figures.ts",
+    "example:ranking": "tsx scripts/ranking_example.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.18",
@@ -45,9 +46,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
-    "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^8.0.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",

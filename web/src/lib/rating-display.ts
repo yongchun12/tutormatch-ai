@@ -25,6 +25,13 @@ export interface RatingDisplay {
   count: number;
   /** "Google" | "TutorMatch" | "Source unknown". */
   sourceLabel: string;
+  /**
+   * True when the rating is Google's, so the caller can render the Google "G"
+   * mark beside it. A wordmark is a far stronger signal of provenance than any
+   * colour, and it is the one cue that survives being colour-blind, printed in
+   * greyscale, or screenshotted into a report.
+   */
+  isGoogle: boolean;
   /** Tailwind classes for the star glyph. */
   starClass: string;
   /** Tailwind classes for the accompanying text badge. */
@@ -46,9 +53,19 @@ export interface RatingDisplay {
 const STYLES = {
   google: {
     label: "Google",
-    star: "text-amber-500 fill-amber-500",
+    /*
+      #FBBC04 is Google Yellow — one of the four brand colours, and the exact
+      shade Google itself fills review stars with. So a yellow star here is not a
+      mistake to be corrected away from Google's look; it IS Google's look. What
+      was missing was any statement of whose star it is, which the "G" mark now
+      supplies. Tailwind's amber-500 (#f59e0b) was close but slightly orange, so
+      the brand hex is used directly.
+    */
+    star: "text-[#FBBC04] fill-[#FBBC04]",
+    // Neutral chip rather than a yellow one: the G mark carries the branding,
+    // and tinting the container as well made the whole badge read as a warning.
     badge:
-      "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900",
+      "bg-white text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600",
   },
   tutormatch: {
     label: "TutorMatch",
@@ -103,16 +120,22 @@ export function resolveRating(
     score: hasRating ? score.toFixed(1) : null,
     count: n,
     sourceLabel: hasRating ? style.label : "",
+    isGoogle: hasRating && source === "google",
     starClass: style.star,
     badgeClass: style.badge,
     emptyLabel: "No reviews yet",
   };
 }
 
-/** "4.0 (2 reviews) · TutorMatch", or "No reviews yet". One line, fully attributed. */
-export function formatRatingSummary(display: RatingDisplay): string {
+/**
+ * "4.0 (2 reviews) · TutorMatch", or "No reviews yet". One line, fully attributed.
+ *
+ * Pass `omitSource` when the caller renders the source itself — e.g. as the
+ * Google "G" mark — so the label is not stated twice in the same badge.
+ */
+export function formatRatingSummary(display: RatingDisplay, omitSource = false): string {
   if (!display.hasRating) return display.emptyLabel;
   const plural = display.count === 1 ? "review" : "reviews";
-  const suffix = display.sourceLabel ? ` · ${display.sourceLabel}` : "";
+  const suffix = !omitSource && display.sourceLabel ? ` · ${display.sourceLabel}` : "";
   return `${display.score} (${display.count} ${plural})${suffix}`;
 }
