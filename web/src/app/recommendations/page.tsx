@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, MapPin, Star, ArrowRight, BrainCircuit, Search } from "lucide-react";
+import { Sparkles, MapPin, Star, ArrowRight, BrainCircuit, Search, Navigation, Loader2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { getSmartRecommendationsAction } from "./actions";
 
@@ -19,6 +19,51 @@ export default function PublicRecommendations() {
     const [loading, setLoading] = useState(false);
     const [recommendations, setRecommendations] = useState<any[]>([]);
     const [searched, setSearched] = useState(false);
+    /** Real coordinates, once the browser has given them. Null = text only. */
+    const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+    const [locating, setLocating] = useState(false);
+    const [locationError, setLocationError] = useState("");
+
+    /**
+     * Ask the browser where the student is, then name the place in the text box.
+     *
+     * Both halves matter. The coordinates make the ranking engine's distance
+     * signal work; the reverse-geocoded name makes the area filter work, since
+     * that matches on city and state text. Without the name, GPS alone would rank
+     * by distance across the whole country.
+     */
+    const useMyLocation = () => {
+        setLocationError("");
+
+        if (!navigator.geolocation) {
+            setLocationError("Your browser does not support location sharing.");
+            return;
+        }
+
+        setLocating(true);
+        navigator.geolocation.getCurrentPosition(
+            async (position) => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                setCoords({ lat, lng });
+
+                try {
+                    const res = await fetch(`/api/location/geocode?lat=${lat}&lng=${lng}`);
+                    const data = await res.json();
+                    if (data.address) setLocation(data.address);
+                } catch {
+                    // Coordinates alone still improve the ranking, so a failed
+                    // reverse lookup is not worth an error message.
+                }
+                setLocating(false);
+            },
+            () => {
+                setLocationError("Could not get your location. Check your browser permissions, or type the area instead.");
+                setLocating(false);
+            },
+            { timeout: 10_000 }
+        );
+    };
 
     const handleAddSubject = () => {
         if (subjectQuery.trim() && !subjects.includes(subjectQuery.trim())) {
@@ -32,7 +77,14 @@ export default function PublicRecommendations() {
         setLoading(true);
         setSearched(true);
         try {
-            const results = await getSmartRecommendationsAction({ subjects, location, budget, notes });
+            const results = await getSmartRecommendationsAction({
+                subjects, location, budget, notes,
+                // Passed through so the engine's distance signal has something to
+                // measure. Omitted before, which is why the 20% distance weight
+                // was re-normalised away on every request from this page.
+                userLat: coords?.lat ?? null,
+                userLng: coords?.lng ?? null,
+            });
             setRecommendations(results);
         } catch (e) {
             console.error(e);
@@ -94,12 +146,48 @@ export default function PublicRecommendations() {
                     <div className="grid sm:grid-cols-2 gap-4 mb-4">
                         <div>
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Preferred area <span className="text-slate-400 font-normal">(optional)</span></label>
-                            <Input
-                                value={location}
-                                onChange={(e) => setLocation(e.target.value)}
-                                placeholder="e.g. Subang Jaya, Penang..."
-                                className="py-5"
-                            />
+                            <div className="flex gap-2">
+                                <Input
+                                    value={location}
+                                    onChange={(e) => {
+                                        setLocation(e.target.value);
+                                        // Typing a different area invalidates the GPS fix — the
+                                        // coordinates would otherwise keep ranking by distance
+                                        // from wherever the student physically is while the text
+                                        // says somewhere else.
+                                        setCoords(null);
+                                    }}
+                                    placeholder="e.g. Subang Jaya, Penang..."
+                                    className="py-5"
+                                />
+                                {/*
+                                    The page had no way to capture a real position at all — only
+                                    this free-text box, which never reached the ranking engine.
+                                    The engine has always accepted coordinates and weights
+                                    distance at 20%; nothing was ever passing them in.
+                                */}
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={useMyLocation}
+                                    disabled={locating}
+                                    title="Use my current location"
+                                    className="shrink-0 px-3 py-5 rounded-xl"
+                                >
+                                    {locating
+                                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                                        : <Navigation className={`w-4 h-4 ${coords ? "text-indigo-600 dark:text-indigo-400" : ""}`} />}
+                                </Button>
+                            </div>
+                            {coords && (
+                                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1.5 inline-flex items-center gap-1">
+                                    <Navigation className="w-3 h-3" />
+                                    Using your location — closer centres will rank higher.
+                                </p>
+                            )}
+                            {locationError && (
+                                <p className="text-xs text-rose-600 dark:text-rose-400 mt-1.5">{locationError}</p>
+                            )}
                         </div>
                         <div>
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Monthly budget <span className="text-slate-400 font-normal">(optional)</span></label>

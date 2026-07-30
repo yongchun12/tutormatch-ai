@@ -28,6 +28,7 @@ export default function CentreForm({ initialData }: CentreFormProps) {
     priceRange: initialData?.priceRange ?? "",
     subjects: initialData?.subjects?.join(", ") ?? "",
     description: initialData?.description ?? "",
+    website: initialData?.website ?? "",
   });
 
   const setField = (key: keyof typeof fields) => (
@@ -87,6 +88,26 @@ export default function CentreForm({ initialData }: CentreFormProps) {
         <div className="space-y-2">
           <label className="text-sm font-medium">Subjects (Comma separated)</label>
           <Input name="subjects" value={fields.subjects} onChange={setField("subjects")} />
+        </div>
+        <div className="space-y-2 md:col-span-2">
+          <label className="text-sm font-medium">Website</label>
+          <Input
+            name="website"
+            value={fields.website}
+            onChange={setField("website")}
+            placeholder="vbest.edu.my"
+          />
+          {/*
+            Worth saying out loud, because it is the whole point of the field:
+            filling this in is what lets the AI sync read the centre and fill in
+            its subjects and fees. Until now only the Google Maps crawler could
+            set it, so a centre Google had no URL for could never be synced.
+            https:// is added automatically.
+          */}
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Saving a website lets <strong>AI Sync</strong> read the centre&apos;s own pages for
+            subjects, fees and announcements. Leave blank if it has none.
+          </p>
         </div>
       </div>
 

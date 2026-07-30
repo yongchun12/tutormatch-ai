@@ -7,10 +7,12 @@ import { TuitionCentre } from "@/models/TuitionCentre";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertCircle, Edit, CheckCircle2, ExternalLink, Globe } from "lucide-react";
+import { AlertCircle, Edit, CheckCircle2, ExternalLink } from "lucide-react";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SyncButton } from "../SyncButton";
 import { CentreTabs } from "@/components/admin/CentreTabs";
+import BulkSyncPanel from "@/components/admin/BulkSyncPanel";
+import { AddWebsiteButton } from "@/components/admin/AddWebsiteButton";
 import { getEnrichmentStats, INCOMPLETE_BASE, MISSING_FILTERS } from "@/services/qualityGateService";
 import type { EnrichmentReason } from "@/lib/quality-gate";
 
@@ -109,6 +111,13 @@ export default async function IncompleteCentresPage(props: {
       </div>
 
       <CentreTabs incompleteCount={enrichment.total} pendingCount={pendingCount} />
+
+      {/* Above the per-gap cards on purpose: reading every website is the one fix
+          that needs no typing, so it is offered before the manual routes. Rendered
+          outside the empty check below so a complete directory can still be
+          re-synced (switch its scope to "Every centre with a website") to pick up
+          new fees and announcements. */}
+      <BulkSyncPanel incompleteCount={enrichment.total} />
 
       {enrichment.total === 0 ? (
         <Card className="rounded-3xl border-slate-200 dark:border-slate-800">
@@ -220,9 +229,19 @@ export default async function IncompleteCentresPage(props: {
                               {centre.website ? (
                                 <SyncButton centreId={centre._id.toString()} hasWebsite />
                               ) : (
-                                <span className="text-xs text-slate-400 inline-flex items-center gap-1">
-                                  <Globe className="w-3 h-3" /> No website to read
-                                </span>
+                                /*
+                                  Was a dead-end label reading "No website to
+                                  read". True, but nothing could be done about it:
+                                  a website only ever arrived from Google Places,
+                                  and no form in the app could set one — so every
+                                  route to the AI sync depended on a field with no
+                                  way in. Now the admin can paste the address they
+                                  found and it is read on the spot.
+                                */
+                                <AddWebsiteButton
+                                  centreId={centre._id.toString()}
+                                  centreName={centre.name}
+                                />
                               )}
                               <Link href={`/dashboard/admin/centres/${centre._id.toString()}/edit`}>
                                 <Button size="sm" variant="outline" className="h-8 px-2 text-indigo-600 border-indigo-200 hover:bg-indigo-50 dark:text-indigo-400 dark:border-indigo-900/50 dark:hover:bg-indigo-950/30">

@@ -135,3 +135,48 @@ export function parseMalaysianAddress(
 
   return { city, state, postcode };
 }
+
+/**
+ * Reduce a full address or landmark to the AREA worth searching.
+ *
+ * Google's autocomplete hands back the whole postal address of whatever the
+ * visitor picked:
+ *
+ *   "Mid Valley Southkey Shopping Mall, Persiaran Southkey 1, Southkey,
+ *    Johor Bahru, Johor, Malaysia"
+ *
+ * Passing that straight to the Places text search asks Google to find THAT
+ * BUILDING, and it obliges: `tuition centre in <the whole string>` returns one
+ * result, "The Mall, Mid Valley Southkey" — the mall itself, which is then
+ * discarded for not looking like a tuition centre. So a visitor searching a real
+ * shopping mall in Johor Bahru saw "No new centres found online" while Google
+ * Maps plainly listed centres nearby. `tuition centre in Johor Bahru` returns
+ * twenty.
+ *
+ * The same string was also being cut down for the database lookup by taking the
+ * first word of four or more letters — which is "Valley", matched against city
+ * and state, and matches nothing in Johor.
+ *
+ * Both callers now come here instead. Returns "City, State" when the city is
+ * known, the state alone when it is not, and the original text when the address
+ * parses to nothing at all (a bare "Kepong" is a better query than an empty one).
+ */
+export function toSearchArea(location: string | null | undefined): string {
+  const raw = (location ?? "").trim();
+  if (!raw) return "";
+
+  const { city, state } = parseMalaysianAddress(raw);
+
+  if (city && state) return `${city}, ${state}`;
+  if (city) return city;
+  if (state) return state;
+
+  // Unparseable: fall back to the last comma-separated part that is not the
+  // country, which is the closest thing to a locality the string offers.
+  const parts = raw
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p && p.toLowerCase() !== "malaysia");
+
+  return parts.length > 0 ? parts[parts.length - 1] : raw;
+}

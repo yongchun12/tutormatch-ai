@@ -2,7 +2,7 @@ import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { extractSubjectsFromText } from "@/services/scraperService";
 import { applyQualityGate, type GateContext } from "@/services/qualityGateService";
-import { syncCentreData } from "@/services/aiSyncService";
+import { autoSyncCentre } from "@/services/autoSync";
 import { parseMalaysianAddress } from "@/lib/address";
 
 /**
@@ -69,6 +69,24 @@ export async function runCrawl(context: GateContext): Promise<CrawlRunResult> {
   const res = await fetch(url);
   const data = await res.json();
 
+  // Google reports failure in the BODY, not the HTTP status. REQUEST_DENIED (bad
+  // or restricted key), OVER_QUERY_LIMIT (quota spent) and INVALID_REQUEST all
+  // arrive as 200 with no `results` — indistinguishable from a genuine empty
+  // search unless `status` is read. Treating them as "found nothing" reported a
+  // dead API key to the admin as a clean run, and the dashboard stored it as
+  // lastRunOk: true. ZERO_RESULTS is the one non-OK status that really does mean
+  // "nothing there", and it falls through to the empty-result branch below.
+  if (data.status && data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+    const detail = data.error_message ? `: ${data.error_message}` : "";
+    console.error("[crawl]", `Google Maps refused the search (${data.status})${detail}`);
+    return {
+      ok: false,
+      summary: `Google Maps refused the search (${data.status})${detail}. Nothing was added.`,
+      area: targetArea,
+      added: 0, autoPublished: 0, heldForReview: 0, websiteSynced: 0, missingSubjects: 0,
+    };
+  }
+
   if (!data.results || data.results.length === 0) {
     console.warn("[crawl]", `Google Maps returned no results for ${targetArea}.`);
     return {
@@ -86,10 +104,29 @@ export async function runCrawl(context: GateContext): Promise<CrawlRunResult> {
   let enrichmentCount = 0;
 
   for (const place of data.results) {
+    // Parsed before the duplicate check, because that check needs the city this
+    // record will actually be STORED under.
+    const parsedAddr = parseMalaysianAddress(place.formatted_address);
+
+    // Dedupe on the Google Place ID first — the only globally unique key here.
+    //
+    // The name clause used to read `{ name: place.name, city: targetArea }`,
+    // which could no longer match anything at all: targetArea is a broad region
+    // ("Selangor") while the record below stores the parsed city ("Puchong").
+    // With that clause dead, a centre the Python directory crawler had already
+    // saved — those have no Place ID to match on — was inserted a second time.
+    //
+    // Narrowed by city rather than name alone, because franchises share a name
+    // and `{ name }` on its own would fold every "Kumon" into one document.
+    const nameClause = parsedAddr.city
+      ? { name: place.name, city: parsedAddr.city }
+      : { name: place.name };
+
     const existing = await TuitionCentre.findOne({
       $or: [
-        { name: place.name, city: targetArea },
-        { googlePlaceId: place.place_id },
+        nameClause,
+        // Guarded: `{ googlePlaceId: undefined }` is not a narrowing filter.
+        ...(place.place_id ? [{ googlePlaceId: place.place_id }] : []),
       ],
     });
 
@@ -122,8 +159,8 @@ export async function runCrawl(context: GateContext): Promise<CrawlRunResult> {
     const address = place.formatted_address || "Address not provided";
     // `city: targetArea, state: "Malaysia"` used to be stored here, which filed
     // Selangor and Penang as cities and a country as a state. Both now come from
-    // the address Google actually returned.
-    const parsedAddr = parseMalaysianAddress(place.formatted_address);
+    // `parsedAddr` — the address Google actually returned — parsed at the top of
+    // this loop so the duplicate check above can use the same value.
     const website = detailsData.result?.website || undefined;
 
     // ORDER MATTERS HERE.
@@ -163,7 +200,10 @@ export async function runCrawl(context: GateContext): Promise<CrawlRunResult> {
       website,
       latitude,
       longitude,
-      location: (longitude && latitude) ? {
+      // Number.isFinite, not truthiness: isValidCoordinate() in lib/quality-gate.ts
+      // documents 0 as a legitimate coordinate, and `(longitude && latitude)`
+      // would drop the GeoJSON point for one while the gate still passed it.
+      location: (Number.isFinite(latitude) && Number.isFinite(longitude)) ? {
         type: "Point",
         coordinates: [longitude, latitude],
       } : undefined,
@@ -173,17 +213,11 @@ export async function runCrawl(context: GateContext): Promise<CrawlRunResult> {
 
     // Step 2 — enrich from the website.
     //
-    // FAILS SOFT, deliberately: the centre is already saved above, and a dead
-    // link, a timeout or a Gemini outage must not undo that. Any error is
-    // logged and the crawl moves on.
-    if (website) {
-      try {
-        await syncCentreData(created._id.toString());
-        syncedCount++;
-      } catch (syncError: any) {
-        console.warn("[crawl]", `Could not read the website for "${place.name}" (${website}): ${syncError?.message || "unknown error"}. The centre was still saved.`);
-      }
-    }
+    // Fails soft and stamps the attempt; see services/autoSync.ts. Shared with
+    // the on-demand and admin-scrape paths so a centre arrives with the same
+    // amount filled in no matter which crawl found it.
+    const synced = await autoSyncCentre(created._id.toString(), website, "crawl");
+    if (synced.updated) syncedCount++;
 
     // Step 3 — judge the enriched record. Re-read it because syncCentreData
     // saved its own copy of the document; `created` is now stale.

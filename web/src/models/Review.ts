@@ -26,6 +26,16 @@ export interface IReview extends Document {
   source: ReviewSource;
   /** Display name for a Google review, whose author has no TutorMatch account. */
   authorName?: string;
+  /**
+   * The review's identifier on the platform it came from. Google Places has no
+   * review id, so this is `google:<unix time>` — the timestamp is stable for a
+   * given review and unique within one place.
+   *
+   * Exists purely so an import can run twice without duplicating. Without it,
+   * re-importing a centre with 5 Google reviews would add 5 more every time, and
+   * the sentiment breakdown would drift further from reality on each run.
+   */
+  externalId?: string;
   createdAt: Date;
 }
 
@@ -53,8 +63,25 @@ const ReviewSchema: Schema<IReview> = new Schema(
       default: "tutormatch",
     },
     authorName: { type: String },
+    externalId: { type: String },
   },
   { timestamps: true }
 );
+
+/**
+ * One imported review per centre, enforced by the database rather than by the
+ * import code remembering to check.
+ *
+ * `partialFilterExpression` limits the constraint to rows that actually have an
+ * externalId — every TutorMatch review has none, and a plain unique index would
+ * treat all of those as duplicates of each other and reject the second one.
+ */
+ReviewSchema.index(
+  { centreId: 1, externalId: 1 },
+  { unique: true, partialFilterExpression: { externalId: { $type: "string" } } }
+);
+
+/** Reading a centre's reviews split by platform is the commonest query here. */
+ReviewSchema.index({ centreId: 1, source: 1 });
 
 export const Review: Model<IReview> = mongoose.models.Review || mongoose.model<IReview>("Review", ReviewSchema);

@@ -7,7 +7,14 @@ from crawler.text_clean import decode_entities, fix_mojibake, detect_teaching_mo
 
 # Same subject vocabulary the TypeScript side uses
 # (web/src/services/scraperService.ts → extractSubjectsFromText), so a centre
-# found by either crawler ends up tagged the same way.
+# found by either crawler ends up tagged the same way. Both write to the same
+# collection: a keyword changed on one side only means the same centre gets
+# different subjects depending on which crawler happened to find it.
+#
+# Note the padding on " bm " and the absence of a bare "malay". Matching is by
+# substring below, so an unpadded "bm" would fire on "BMW" and "malay" would fire
+# on "Malaysia" — which appears in almost every Malaysian address and review. The
+# TypeScript side reaches the same result with \b word boundaries.
 SUBJECT_KEYWORDS = {
     "Mathematics": ["math", "mathematics", "calculus", "algebra", "add math", "additional math"],
     "Science": ["science", "sains"],
@@ -16,8 +23,14 @@ SUBJECT_KEYWORDS = {
     "Biology": ["biology", "biologi"],
     "English": ["english", "inggeris", "muet", "ielts"],
     "Bahasa Melayu": ["bahasa melayu", "melayu", " bm "],
-    "Sejarah": ["sejarah", "history"],
-    "Accounting": ["account", "akaun", "accounting"],
+    # "history" dropped to match the TypeScript list: it is a real subject name
+    # and also ordinary English ("a long history of good results"). "sejarah" is
+    # unambiguous. A centre that only ever writes "History" now yields no subject
+    # and is flagged for enrichment, rather than tagged from a guess.
+    "Sejarah": ["sejarah"],
+    # Bare "account" dropped for the same reason: it fires on "my account" and
+    # "on account of". "accounting" and "akaun" carry the subject.
+    "Accounting": ["accounting", "akaun", "akaun perniagaan"],
 }
 
 

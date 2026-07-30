@@ -11,6 +11,22 @@ import { needsEnrichment } from "@/lib/quality-gate";
 import { validatePassword } from "@/lib/password";
 import { revalidatePath } from "next/cache";
 
+/**
+ * Tidy a website address typed into a form. NOT exported — this file is
+ * `"use server"`, and such a module may export async functions only.
+ *
+ * Adds the protocol when it is missing, because nobody types "https://" and a
+ * bare "vbest.edu.my" is not a URL any fetch can follow. Safety is not checked
+ * here on purpose: services/aiSyncService.ts runs checkPublicUrl before it
+ * fetches anything, so a private or malformed address can be stored but never
+ * requested — and rejecting it mid-save would lose the admin's other edits.
+ */
+function normaliseWebsite(raw: string | null | undefined): string {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return "";
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
 export async function approveCentreAction(centreId: string) {
     await requireAdmin();
     if (!centreId) {
@@ -266,6 +282,7 @@ export async function createCentreAction(formData: FormData) {
     const description = formData.get("description") as string;
     const priceRange = formData.get("priceRange") as string;
     const subjectsStr = formData.get("subjects") as string;
+    const website = normaliseWebsite(formData.get("website") as string);
 
     const subjects = subjectsStr ? subjectsStr.split(",").map(s => s.trim()).filter(Boolean) : [];
 
@@ -278,6 +295,7 @@ export async function createCentreAction(formData: FormData) {
         description,
         priceRange,
         subjects,
+        website: website || undefined,
         status: "approved"
     });
 
@@ -298,6 +316,7 @@ export async function updateCentreAction(formData: FormData) {
     const description = formData.get("description") as string;
     const priceRange = formData.get("priceRange") as string;
     const subjectsStr = formData.get("subjects") as string;
+    const website = normaliseWebsite(formData.get("website") as string);
 
     const subjects = subjectsStr ? subjectsStr.split(",").map(s => s.trim()).filter(Boolean) : [];
 
@@ -312,6 +331,11 @@ export async function updateCentreAction(formData: FormData) {
     centre.description = description;
     centre.priceRange = priceRange;
     centre.subjects = subjects;
+    // Editable here at last. The field existed on the model and was read by the
+    // AI sync, but only Google Places could ever write it — so a centre Google
+    // had no URL for could never be synced by anyone. Cleared when emptied, so a
+    // wrong address can be removed as well as corrected.
+    centre.website = website || undefined;
 
     // Re-evaluate whether the listing is still incomplete.
     //

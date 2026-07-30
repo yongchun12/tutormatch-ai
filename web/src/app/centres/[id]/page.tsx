@@ -48,7 +48,12 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
     /** True only when OUR sentiment model actually classified this review. */
     analysed: boolean;
   }[] = [];
-  let aiSummary = { pos: 0, neu: 0, neg: 0, total: 0 };
+  /** A positive/neutral/negative split over some set of classified reviews. */
+  type SentimentTally = { pos: number; neu: number; neg: number; total: number };
+  let aiSummary: SentimentTally & {
+    /** The same split per platform, so the two are never merged into one figure. */
+    bySource?: { tutormatch: SentimentTally | null; google: SentimentTally | null };
+  } = { pos: 0, neu: 0, neg: 0, total: 0 };
 
   try {
     let rawCentre;
@@ -73,6 +78,18 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
         source: r.source === "google" ? "google" : "tutormatch",
         analysed: Boolean(r.sentimentScore),
       }));
+
+      /*
+        Google reviews already imported and classified (see
+        services/googleReviewImport.ts). The live fetch below must not add these
+        a second time — the stored copy carries a real sentiment score from our
+        model, the live copy would carry only the star-threshold guess.
+      */
+      const storedGoogleIds = new Set(
+        rawReviews
+          .filter((r: any) => r.source === "google" && typeof r.externalId === "string")
+          .map((r: any) => r.externalId as string)
+      );
 
       centre = {
         id: rawCentre._id.toString(),
@@ -142,18 +159,24 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
               }
 
               if (data.result.reviews) {
-                const googleReviews = data.result.reviews.map((r: any) => ({
-                  id: `google-${r.time}`,
-                  name: r.author_name || "Google User",
-                  // A crude rating threshold, NOT our sentiment model. Flagged
-                  // `analysed: false` so it is excluded from the model's stats
-                  // below and labelled honestly on the card.
-                  score: r.rating >= 4 ? "positive" : (r.rating <= 2 ? "negative" : "neutral"),
-                  text: r.text,
-                  rating: r.rating,
-                  source: "google" as const,
-                  analysed: false,
-                }));
+                const googleReviews = data.result.reviews
+                  // Skip any we have already imported and classified properly.
+                  .filter((r: any) => !storedGoogleIds.has(`google:${r.time}`))
+                  .map((r: any) => ({
+                    id: `google-${r.time}`,
+                    name: r.author_name || "Google User",
+                    // A crude rating threshold, NOT our sentiment model. This is
+                    // the fallback for a centre whose Google reviews have not been
+                    // imported yet; flagged `analysed: false` so it is excluded
+                    // from the model's figures and labelled honestly on the card.
+                    // Import the centre (admin → Manage Centres) and the stored
+                    // copy replaces this with a real classification.
+                    score: r.rating >= 4 ? "positive" : (r.rating <= 2 ? "negative" : "neutral"),
+                    text: r.text,
+                    rating: r.rating,
+                    source: "google" as const,
+                    analysed: false,
+                  }));
                 reviewsList = [...reviewsList, ...googleReviews];
               }
 
@@ -169,27 +192,49 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
       /*
         Sentiment summary — counted ONLY over reviews our model actually scored.
 
-        This used to run over the merged list, Google reviews included. Those
-        carry no model output at all: their "sentiment" is the `rating >= 4`
-        threshold a few lines above. So a centre with 2 TutorMatch reviews and 5
-        Google ones reported "Our ML model processed 7 student reviews", of
-        which it had in fact processed 2 — a claim about the system's own
-        behaviour that was not true.
+        This used to run over the merged list including Google reviews that
+        carried no model output at all: their "sentiment" was the `rating >= 4`
+        threshold above. A centre with 2 TutorMatch reviews and 5 Google ones
+        reported "our model processed 7 reviews", of which it had processed 2.
+
+        `analysed` is now the whole test, and it is earned rather than assumed: a
+        Google review counts once it has been imported and run through the same
+        classifier as a TutorMatch review (services/googleReviewImport.ts). One
+        that is only being previewed from the live API still does not count.
+
+        The two populations are also reported separately below, because a
+        combined percentage hides which platform the opinion came from — and the
+        Google sample is capped at five reviews by the API however many exist.
       */
       const analysedReviews = reviewsList.filter((r) => r.analysed);
       if (analysedReviews.length > 0) {
-        let pos = 0; let neu = 0; let neg = 0;
-        analysedReviews.forEach(r => {
-          if (r.score === 'positive') pos++;
-          else if (r.score === 'negative') neg++;
-          else neu++;
-        });
-        const total = analysedReviews.length;
+        const tally = (rows: typeof analysedReviews) => {
+          let pos = 0, neu = 0, neg = 0;
+          rows.forEach((r) => {
+            if (r.score === "positive") pos++;
+            else if (r.score === "negative") neg++;
+            else neu++;
+          });
+          const total = rows.length;
+          return {
+            pos: Math.round((pos / total) * 100),
+            neu: Math.round((neu / total) * 100),
+            neg: Math.round((neg / total) * 100),
+            total,
+          };
+        };
+
+        const ours = analysedReviews.filter((r) => r.source === "tutormatch");
+        const fromGoogle = analysedReviews.filter((r) => r.source === "google");
+
         aiSummary = {
-          pos: Math.round((pos / total) * 100),
-          neu: Math.round((neu / total) * 100),
-          neg: Math.round((neg / total) * 100),
-          total: total
+          ...tally(analysedReviews),
+          // Per-platform breakdowns. Null when a platform contributed nothing,
+          // so the UI can omit the row rather than print "0% of 0".
+          bySource: {
+            tutormatch: ours.length > 0 ? tally(ours) : null,
+            google: fromGoogle.length > 0 ? tally(fromGoogle) : null,
+          },
         };
       }
     }
@@ -484,14 +529,29 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                     <CardTitle className="font-heading text-2xl">Sentiment Analysis Summary</CardTitle>
                     <CardDescription>
                       {/*
-                        States the exact denominator. The old copy said "processed
-                        {reviewsList.length} student reviews" while the summary was
-                        computed over Google reviews too, which the model never sees.
+                        States the exact denominator, and where it came from. The
+                        original copy said "processed {reviewsList.length} student
+                        reviews" while computing over Google reviews the model had
+                        never read; the replacement then said Google reviews were
+                        never included, which stopped being true once they could be
+                        imported and classified. It now describes whatever is
+                        actually in the mix.
                       */}
-                      Based on the {aiSummary.total} review{aiSummary.total === 1 ? "" : "s"} written on
-                      TutorMatch that our sentiment model has classified.
+                      Based on the {aiSummary.total} review{aiSummary.total === 1 ? "" : "s"} our
+                      sentiment model has read and classified
+                      {aiSummary.bySource?.tutormatch && aiSummary.bySource?.google ? (
+                        <> — {aiSummary.bySource.tutormatch.total} written on TutorMatch
+                          and {aiSummary.bySource.google.total} imported from Google.</>
+                      ) : aiSummary.bySource?.google ? (
+                        <> — all of them imported from Google.</>
+                      ) : (
+                        <> — all of them written on TutorMatch.</>
+                      )}
                       {reviewsList.length > aiSummary.total && (
-                        <> Google reviews shown below are not included — we don&apos;t run our model on them.</>
+                        <> {reviewsList.length - aiSummary.total} more review
+                          {reviewsList.length - aiSummary.total === 1 ? " is" : "s are"} shown
+                          below but not counted here, because {reviewsList.length - aiSummary.total === 1 ? "it has" : "they have"} not
+                          been through the model.</>
                       )}
                     </CardDescription>
                   </CardHeader>
@@ -499,9 +559,10 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                     {aiSummary.total === 0 ? (
                       <div className="text-center py-8">
                         <p className="text-indigo-900/60 dark:text-indigo-200/60">
-                          No TutorMatch reviews have been analysed yet, so there are no
-                          sentiment insights to show.
-                          {reviewsList.length > 0 && " The reviews below came from Google."}
+                          No reviews have been through the sentiment model yet, so there is
+                          nothing to summarise.
+                          {reviewsList.length > 0 &&
+                            " The reviews below came from Google and have not been imported for analysis."}
                         </p>
                       </div>
                     ) : (
@@ -524,10 +585,62 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                           </div>
                         </div>
 
+                        {/*
+                          The same split per platform.
+
+                          A single combined percentage would hide which platform
+                          the opinion came from, and the two samples are not
+                          comparable: TutorMatch reviews are every review left
+                          here, while Google's API returns at most five review
+                          texts per centre no matter how many exist. Shown side by
+                          side so the reader can see the size of each before
+                          reading anything into the difference.
+                        */}
+                        {aiSummary.bySource?.tutormatch && aiSummary.bySource?.google && (
+                          <div className="mb-6 rounded-xl border border-indigo-100 dark:border-indigo-800/50 bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="text-xs text-slate-500 dark:text-slate-400 border-b border-indigo-100 dark:border-indigo-800/50">
+                                <tr>
+                                  <th className="text-left font-medium px-4 py-2">Where the reviews came from</th>
+                                  <th className="text-right font-medium px-3 py-2">Reviews</th>
+                                  <th className="text-right font-medium px-3 py-2">Positive</th>
+                                  <th className="text-right font-medium px-3 py-2">Neutral</th>
+                                  <th className="text-right font-medium px-4 py-2">Negative</th>
+                                </tr>
+                              </thead>
+                              <tbody className="text-slate-700 dark:text-slate-200">
+                                {([
+                                  ["Written on TutorMatch", aiSummary.bySource.tutormatch],
+                                  ["Imported from Google", aiSummary.bySource.google],
+                                ] as const).map(([label, row]) => (
+                                  <tr key={label} className="border-t border-indigo-50 dark:border-indigo-900/40">
+                                    <td className="px-4 py-2.5">{label}</td>
+                                    <td className="px-3 py-2.5 text-right tabular-nums font-medium">{row.total}</td>
+                                    <td className="px-3 py-2.5 text-right tabular-nums">{row.pos}%</td>
+                                    <td className="px-3 py-2.5 text-right tabular-nums">{row.neu}%</td>
+                                    <td className="px-4 py-2.5 text-right tabular-nums">{row.neg}%</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 px-4 py-2.5 border-t border-indigo-50 dark:border-indigo-900/40">
+                              Google returns at most five review texts per centre, so its row is a
+                              sample rather than the full picture.
+                            </p>
+                          </div>
+                        )}
+
                         <div className="bg-white/60 dark:bg-slate-800/60 rounded-xl p-4 backdrop-blur-sm border border-indigo-100 dark:border-indigo-800/50">
                           <p className="text-sm text-indigo-900 dark:text-indigo-200 font-medium leading-relaxed">
-                            <span className="font-bold">AI Verdict: </span> 
-                            {aiSummary.pos > 70 ? "Highly recommended by students." : "Mixed reception from students."} 
+                            <span className="font-bold">Overall: </span>
+                            {aiSummary.pos > 70
+                              ? "Mostly positive."
+                              : aiSummary.neg > 40
+                                ? "Mixed, with a notable share of negative reviews."
+                                : "Mixed reception."}{" "}
+                            <span className="font-normal text-indigo-900/70 dark:text-indigo-200/70">
+                              Across {aiSummary.total} classified review{aiSummary.total === 1 ? "" : "s"}.
+                            </span>
                           </p>
                         </div>
                       </>

@@ -3,6 +3,7 @@ import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { discoverAndSyncCentres } from "@/services/scraperService";
 import { formatLocation, formatTeachingMode } from "@/lib/centre-display";
+import { parseMalaysianAddress } from "@/lib/address";
 
 /**
  * Public location discovery for the directory page. Refreshes the database from
@@ -39,17 +40,29 @@ export async function GET(req: Request) {
       console.error("discover crawl failed:", err);
     }
 
-    // Match on the area word (e.g. "Subang" from "Subang Jaya Medical Centre")
-    // so a specific landmark still matches centres stored as "Subang Jaya, …".
-    const term = location.split(/[\s,]+/).find((w) => w.length >= 4) || location;
+    // Match on the parsed city and state, not on a word chopped out of the raw
+    // string. The old rule — first word of four or more letters — turned
+    //
+    //   "Mid Valley Southkey Shopping Mall, …, Johor Bahru, Johor, Malaysia"
+    //
+    // into "Valley", searched city/state/address for it, and found nothing in
+    // Johor. The building's name is the least useful part of a landmark address;
+    // the locality at the end is what centres are actually filed under.
+    const { city, state } = parseMalaysianAddress(location);
+
+    // Fall back to the raw text when the address parses to nothing (a bare
+    // "Kepong" is still a usable search).
+    const terms = [city, state].filter(Boolean);
+    const escape = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const patterns = (terms.length > 0 ? terms : [location]).map(escape);
 
     const rows = await TuitionCentre.find({
       status: "approved",
-      $or: [
-        { city: { $regex: term, $options: "i" } },
-        { state: { $regex: term, $options: "i" } },
-        { address: { $regex: term, $options: "i" } },
-      ],
+      $or: patterns.flatMap((p) => [
+        { city: { $regex: p, $options: "i" } },
+        { state: { $regex: p, $options: "i" } },
+        { address: { $regex: p, $options: "i" } },
+      ]),
     })
       .sort({ averageRating: -1, reviewCount: -1 })
       .limit(30)

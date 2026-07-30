@@ -31,6 +31,27 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return distance;
 }
 
+/**
+ * How many subject badges a directory card shows before collapsing to a count.
+ *
+ * Five fits two rows at the narrowest card width, which keeps every card in a
+ * grid row the same height. The centre's own page lists all of them.
+ */
+const CARD_SUBJECT_LIMIT = 5;
+
+/**
+ * Put the subjects the visitor is filtering by at the front.
+ *
+ * Without this, ticking "Chemistry" could return a centre whose card showed five
+ * other subjects and "+7 more" — the card giving no sign of why it matched. The
+ * order is presentational only; nothing here filters.
+ */
+function orderSubjectsForCard(subjects: string[] = [], selected: string[] = []): string[] {
+  if (selected.length === 0) return subjects;
+  const picked = new Set(selected);
+  return [...subjects.filter((s) => picked.has(s)), ...subjects.filter((s) => !picked.has(s))];
+}
+
 export default function CentresListClient({
   initialCentres,
   savedCentreIds = [],
@@ -69,13 +90,26 @@ export default function CentresListClient({
   const [locLoading, setLocLoading] = useState(false);
   const locBoxRef = useRef<HTMLDivElement>(null);
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
+  /** Text typed into the Subjects filter's own search box. Narrows the checkbox
+   *  list only — it never filters centres by itself. */
+  const [subjectFilterQuery, setSubjectFilterQuery] = useState("");
   const [selectedMode, setSelectedMode] = useState<string>("All");
   const [sortOrder, setSortOrder] = useState<string>("Recommended");
   
   // Crawling State
   const [isCrawling, setIsCrawling] = useState(false);
   const [crawlMessage, setCrawlMessage] = useState("");
-  const [hasCrawled, setHasCrawled] = useState(false);
+  /**
+   * The location string the auto-crawl last ran for, or "" if it has not run.
+   *
+   * This was a boolean, `hasCrawled`, which latched true on the first search and
+   * was only ever reset by "Clear all filters" and by picking a place from the
+   * autocomplete dropdown. So typing a second location by hand searched the
+   * centres already loaded, found none, and stopped — the crawl that would have
+   * fetched that area never fired. Storing WHICH location was crawled makes the
+   * guard compare targets instead of remembering that a crawl happened once.
+   */
+  const [crawledFor, setCrawledFor] = useState("");
 
   // Compare State
   const [compareList, setCompareList] = useState<any[]>([]);
@@ -142,16 +176,41 @@ export default function CentresListClient({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Dynamic Subjects from loaded directory
+  // Dynamic Subjects from loaded directory, with how many centres offer each —
+  // the count turns a bare checkbox list into something you can judge before
+  // ticking, and makes an empty result predictable rather than a surprise.
   const dynamicSubjects = useMemo(() => {
-    const subjectsSet = new Set<string>();
+    // A plain object, not a Map: the `Map` identifier in this file is the
+    // lucide-react icon imported at the top, which shadows the global.
+    const counts: Record<string, number> = {};
     allCentres.forEach(c => {
       if (Array.isArray(c.subjects)) {
-        c.subjects.forEach((sub: string) => subjectsSet.add(sub));
+        c.subjects.forEach((sub: string) => {
+          counts[sub] = (counts[sub] ?? 0) + 1;
+        });
       }
     });
-    return Array.from(subjectsSet).sort();
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [allCentres]);
+
+  /**
+   * The subject list narrowed by the filter's own search box.
+   *
+   * A ticked subject ALWAYS stays visible, even when it does not match what is
+   * typed. Otherwise typing a new search hides the boxes you already ticked
+   * while they are still filtering the results — the list would shrink for a
+   * reason nothing on screen explained, and there would be no way to untick them
+   * without clearing the search first.
+   */
+  const visibleSubjects = useMemo(() => {
+    const q = subjectFilterQuery.trim().toLowerCase();
+    if (!q) return dynamicSubjects;
+    return dynamicSubjects.filter(
+      (s) => s.name.toLowerCase().includes(q) || selectedSubjects.includes(s.name)
+    );
+  }, [dynamicSubjects, subjectFilterQuery, selectedSubjects]);
 
   /**
    * Whether anything is currently narrowing the list.
@@ -177,7 +236,7 @@ export default function CentresListClient({
     setRadius(defaultRadiusKm);
     setUserLocation(null);
     setLocationName("");
-    setHasCrawled(false);
+    setCrawledFor("");
     // Drop the ?q=&address=&lat=&lng= params so the URL no longer filters.
     router.push("/centres");
   };
@@ -235,14 +294,25 @@ export default function CentresListClient({
         let passesGeneral = true;
         if (q) {
           const subjects: string[] = c.subjects || [];
-          // Match on name or a listed subject. Crawled centres often have no
-          // subjects tagged yet — don't hide those on a subject search, since we
-          // simply don't know their subjects (better to show than to lose them).
-          const hasNoSubjects = subjects.length === 0;
+          /*
+            Match the typed text against the name or a listed subject.
+
+            There used to be a third clause here: a centre with NO subjects
+            tagged passed regardless of what was typed. The intent was kind — on
+            a subject search, don't hide a centre just because nobody has
+            recorded what it teaches — but it made searching by name impossible.
+            41 of the 56 approved centres currently have no subjects, so every
+            one of them matched every query: typing an exact centre name returned
+            that centre plus 41 unrelated ones, and the box looked broken.
+
+            A filter that cannot exclude anything is not a filter. Centres with
+            unknown subjects are now excluded from a text search like any other
+            non-match — they are still reachable by name, and the admin
+            "Missing details" queue exists to fill those gaps in properly.
+          */
           passesGeneral =
             c.name?.toLowerCase().includes(q) ||
-            subjects.some((s) => s.toLowerCase().includes(q)) ||
-            hasNoSubjects;
+            subjects.some((s) => s.toLowerCase().includes(q));
         }
 
         // When we have real coordinates, filter by distance (radius) below —
@@ -330,16 +400,29 @@ export default function CentresListClient({
   useEffect(() => {
     async function triggerCrawl() {
       const targetAddress = locationQuery.trim() || locationName;
-      if (targetAddress && processedCentres.length === 0 && !isCrawling && !hasCrawled) {
+      // Compared against the location already crawled, not a "have we ever
+      // crawled" flag — so a second, different search still searches.
+      if (targetAddress && processedCentres.length === 0 && !isCrawling && crawledFor !== targetAddress) {
         setIsCrawling(true);
-        setHasCrawled(true); // Prevent multiple triggers for the same search
-        setCrawlMessage("Searching Google Maps for tuition centres...");
+        setCrawledFor(targetAddress); // don't re-fire for THIS location
+        // Two stages, and the second one is slow: the server looks the area up on
+        // Google Maps, then opens each centre's own website and reads it. Saying
+        // only "Searching Google Maps" would leave the visitor watching a spinner
+        // for up to a minute with no idea anything else was happening.
+        setCrawlMessage("Searching Google Maps for tuition centres…");
+        const readingStage = setTimeout(
+          () => setCrawlMessage("Reading each centre's website for subjects and fees… this can take up to a minute."),
+          4000
+        );
         
         try {
           // Public, throttled discovery endpoint (the admin /api/crawl/ondemand
           // is locked down). Returns approved centres for the location.
           const res = await fetch(`/api/centres/discover?location=${encodeURIComponent(targetAddress)}`);
           const data = await res.json();
+          // Whatever stage it reached, the wait is over — stop the message from
+          // switching to "reading websites" after the results have arrived.
+          clearTimeout(readingStage);
           const found: any[] = data.centres || [];
 
           // Only the centres we don't already have loaded.
@@ -389,6 +472,7 @@ export default function CentresListClient({
             setTimeout(() => setIsCrawling(false), 2000);
           }
         } catch (e) {
+          clearTimeout(readingStage);
           console.error(e);
           setCrawlMessage("Failed to search online.");
           setTimeout(() => setIsCrawling(false), 2000);
@@ -396,7 +480,14 @@ export default function CentresListClient({
       }
     }
     triggerCrawl();
-  }, [userLocation, locationName, processedCentres.length, isCrawling, hasCrawled]);
+    // `locationQuery` belongs here: it is what `targetAddress` is built from, and
+    // leaving it out was the second half of the same bug. Going from one empty
+    // search straight to another changed no listed dependency — length stayed 0 —
+    // so the effect never re-ran and the new location was never looked up.
+    // eslint react-hooks/exhaustive-deps also wants allCentres, searchQuery and
+    // selectedSubjects; those are read only to word the "hidden by your filters"
+    // message, and adding them would re-fire the crawl on every keystroke.
+  }, [userLocation, locationName, locationQuery, processedCentres.length, isCrawling, crawledFor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pagination Logic
   const rawPage = parseInt(searchParams.get("page") || "1");
@@ -422,13 +513,28 @@ export default function CentresListClient({
             <div className="w-full md:w-[700px] flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input 
-                  type="text" 
-                  placeholder="Search name or subject..." 
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white shadow-sm"
+                <input
+                  type="text"
+                  // Names an example of each thing it accepts. "Search name or
+                  // subject" was accurate but abstract, and the box had until now
+                  // been unable to find a centre by name at all, so it is worth
+                  // showing plainly that both work.
+                  placeholder="Centre name or subject (e.g. STEPS, Physics)…"
+                  aria-label="Search by centre name or subject"
+                  className="w-full pl-10 pr-9 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all dark:text-white shadow-sm"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    aria-label="Clear search"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
               <div className="relative flex-1" ref={locBoxRef}>
                 <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 z-10" />
@@ -464,7 +570,10 @@ export default function CentresListClient({
                           setLocationQuery(p.description);
                           setShowLocDropdown(false);
                           setLocPredictions([]);
-                          setHasCrawled(false);
+                          // No longer strictly needed — the guard now compares
+                          // locations — but picking a place is an explicit new
+                          // search, so clearing it keeps the intent obvious.
+                          setCrawledFor("");
                           // Geocode the picked place so we search by distance
                           // (robust for landmarks), not by matching address text.
                           try {
@@ -579,32 +688,87 @@ export default function CentresListClient({
 
                 {/* Subjects */}
                 <div className="space-y-3">
-                  <h4 className="text-sm font-medium text-slate-900 dark:text-white">Subjects</h4>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h4 className="text-sm font-medium text-slate-900 dark:text-white">Subjects</h4>
+                    {selectedSubjects.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSubjects([])}
+                        className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                      >
+                        Clear {selectedSubjects.length}
+                      </button>
+                    )}
+                  </div>
+
+                  {/*
+                    Search box, because the list is built from whatever the loaded
+                    centres teach and grows as the directory does — long enough
+                    that finding one subject means reading every checkbox.
+                  */}
+                  {dynamicSubjects.length > 8 && (
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={subjectFilterQuery}
+                        onChange={(e) => setSubjectFilterQuery(e.target.value)}
+                        placeholder={`Search ${dynamicSubjects.length} subjects…`}
+                        aria-label="Search subjects"
+                        className="w-full pl-8 pr-7 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:border-indigo-500"
+                      />
+                      {subjectFilterQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSubjectFilterQuery("")}
+                          aria-label="Clear subject search"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {selectedSubjects.length > 1 && (
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       Showing centres that teach <strong>all {selectedSubjects.length}</strong> selected subjects.
                     </p>
                   )}
-                  {dynamicSubjects.map(subject => (
-                    <label key={subject} className="flex items-center gap-3 cursor-pointer group">
-                      <div className="w-5 h-5 rounded border border-slate-300 dark:border-slate-600 group-hover:border-indigo-500 flex items-center justify-center transition-colors">
-                        <div className={`w-3 h-3 rounded-sm bg-indigo-500 transition-opacity ${selectedSubjects.includes(subject) ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`} />
-                      </div>
-                      <input 
-                        type="checkbox" 
-                        className="hidden"
-                        checked={selectedSubjects.includes(subject)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedSubjects([...selectedSubjects, subject]);
-                          } else {
-                            setSelectedSubjects(selectedSubjects.filter(s => s !== subject));
-                          }
-                        }}
-                      />
-                      <span className="text-sm text-slate-600 dark:text-slate-400">{subject}</span>
-                    </label>
-                  ))}
+
+                  {/* Capped height with its own scroll, so a long subject list
+                      cannot push the Teaching Mode filter off the screen. */}
+                  <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                    {visibleSubjects.map(({ name: subject, count }) => (
+                      <label key={subject} className="flex items-center gap-3 cursor-pointer group">
+                        <div className="w-5 h-5 shrink-0 rounded border border-slate-300 dark:border-slate-600 group-hover:border-indigo-500 flex items-center justify-center transition-colors">
+                          <div className={`w-3 h-3 rounded-sm bg-indigo-500 transition-opacity ${selectedSubjects.includes(subject) ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`} />
+                        </div>
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={selectedSubjects.includes(subject)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedSubjects([...selectedSubjects, subject]);
+                            } else {
+                              setSelectedSubjects(selectedSubjects.filter(s => s !== subject));
+                            }
+                          }}
+                        />
+                        <span className="text-sm text-slate-600 dark:text-slate-400 flex-1 min-w-0 truncate">{subject}</span>
+                        {/* How many loaded centres teach it — lets you see a dead
+                            end before ticking it. */}
+                        <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500 shrink-0">{count}</span>
+                      </label>
+                    ))}
+
+                    {visibleSubjects.length === 0 && (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        No subject matches &ldquo;{subjectFilterQuery}&rdquo;.
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Teaching Mode */}
@@ -668,15 +832,51 @@ export default function CentresListClient({
               </div>
             )}
 
+            {/*
+              Empty state. Now that a text search can genuinely exclude centres
+              (it previously let every subject-less centre through, so it almost
+              never emptied), this is seen far more often — so it says WHICH
+              filter is narrowing things and offers to drop just that one, rather
+              than only the all-or-nothing "Clear All Filters".
+            */}
             {!isCrawling && processedCentres.length === 0 && (
-              <div className="text-center py-16 text-slate-500 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm mb-8">
-                <p className="text-lg font-medium text-slate-900 dark:text-white mb-4">No centres found matching your exact criteria.</p>
-                <Button
-                  onClick={clearAllFilters}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md"
-                >
-                  Clear All Filters
-                </Button>
+              <div className="text-center py-16 px-6 text-slate-500 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm mb-8">
+                <p className="text-lg font-medium text-slate-900 dark:text-white mb-2">
+                  No centres match your search.
+                </p>
+
+                <p className="text-sm mb-5 max-w-md mx-auto">
+                  {searchQuery.trim() ? (
+                    <>Nothing matches <strong className="text-slate-700 dark:text-slate-200">&ldquo;{searchQuery}&rdquo;</strong> by name or subject.</>
+                  ) : selectedSubjects.length > 1 ? (
+                    <>No centre teaches all {selectedSubjects.length} of the subjects you ticked.</>
+                  ) : selectedSubjects.length === 1 ? (
+                    <>No centre here is listed as teaching {selectedSubjects[0]}. Many crawled centres have no subjects recorded yet.</>
+                  ) : userLocation ? (
+                    <>Nothing within {radius} km. Try widening the distance.</>
+                  ) : (
+                    <>Try a different search or a nearby area.</>
+                  )}
+                </p>
+
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {searchQuery.trim() && (
+                    <Button variant="outline" onClick={() => setSearchQuery("")} className="rounded-xl">
+                      Clear the search text
+                    </Button>
+                  )}
+                  {selectedSubjects.length > 0 && (
+                    <Button variant="outline" onClick={() => setSelectedSubjects([])} className="rounded-xl">
+                      Clear {selectedSubjects.length} subject{selectedSubjects.length === 1 ? "" : "s"}
+                    </Button>
+                  )}
+                  <Button
+                    onClick={clearAllFilters}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md"
+                  >
+                    Clear All Filters
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -743,12 +943,35 @@ export default function CentresListClient({
                     <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-2 mb-4">
                       {centre.description}
                     </p>
+                    {/*
+                      At most CARD_SUBJECT_LIMIT badges, then a count.
+
+                      A centre teaching a dozen subjects pushed the card several
+                      rows taller than its neighbours, so a grid row was as tall
+                      as its busiest card and the list stopped scanning evenly.
+                      The full list is on the centre's own page — this is a
+                      preview, and the "+N more" says plainly that it is one.
+
+                      Subjects the visitor filtered by are shown FIRST, so a
+                      search for Chemistry never hides Chemistry behind "+7 more".
+                    */}
                     <div className="flex flex-wrap gap-2 mb-4">
-                      {centre.subjects.map((subject: string) => (
-                        <Badge key={subject} variant="secondary" className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200">
-                          {subject}
+                      {orderSubjectsForCard(centre.subjects, selectedSubjects)
+                        .slice(0, CARD_SUBJECT_LIMIT)
+                        .map((subject: string) => (
+                          <Badge key={subject} variant="secondary" className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 hover:bg-slate-200">
+                            {subject}
+                          </Badge>
+                        ))}
+                      {centre.subjects.length > CARD_SUBJECT_LIMIT && (
+                        <Badge
+                          variant="outline"
+                          className="border-dashed border-slate-300 text-slate-500 dark:border-slate-600 dark:text-slate-400"
+                          title={centre.subjects.join(", ")}
+                        >
+                          +{centre.subjects.length - CARD_SUBJECT_LIMIT} more
                         </Badge>
-                      ))}
+                      )}
                     </div>
                     
                     {/* AI Recommendation Badge */}

@@ -286,18 +286,38 @@ class MongoPipeline:
     def from_crawler(cls, crawler):
         return cls(
             mongo_uri=os.getenv('MONGODB_URI', 'mongodb://localhost:27017/tuition_db'),
-            mongo_db='test' # The default DB name if not specified in URI
+            # Honours MONGODB_DB, the same variable regate_records.py and
+            # cleanup_records.py read, and the same one `npm run dev:test` sets.
+            # This was hardcoded to 'test', so a crawl launched while the rest of
+            # the project was pointed at tutormatch_test still wrote to the real
+            # data — the one direction that cannot be undone. 'test' remains the
+            # default, so existing commands behave exactly as before.
+            mongo_db=os.getenv('MONGODB_DB', 'test'),
         )
 
     def open_spider(self, spider):
         self.client = pymongo.MongoClient(self.mongo_uri)
         self.db = self.client[self.mongo_db]
+        # Stated up front, every run. The database a crawl writes to is the one
+        # thing worth being certain of before 200 records go into it.
+        spider.logger.info(f"Writing to MongoDB database: {self.mongo_db!r}")
 
     def close_spider(self, spider):
         self.client.close()
 
     def process_item(self, item, spider):
         name = item.get('name')
+
+        # Did THIS run actually obtain Google data?
+        #
+        # False covers every way the lookup can come up empty: no API key, a
+        # timeout, robots.txt refusing the host, a non-OK status, or a match this
+        # crawler refused. It matters because the spider never scrapes a rating,
+        # so apply_required_defaults() fills averageRating with 0.0 and
+        # reviewCount with 0 — and $set-ing those defaults over an existing
+        # record's real "4.7 from 63 reviews" is silent data loss. See the
+        # existing-record branch at the bottom of this method.
+        google_data_fresh = False
 
         api_key = os.getenv('GOOGLE_MAPS_API_KEY')
         if api_key and name:
@@ -338,6 +358,7 @@ class MongoPipeline:
                         place = None
 
                     if place is not None:
+                        google_data_fresh = True
                         # MERGE GOOGLE MAPS DATA INTO SCRAPY DATA
                         item['averageRating'] = place.get('rating', item.get('averageRating', 0.0))
                         item['reviewCount'] = place.get('user_ratings_total', item.get('reviewCount', 0))
@@ -391,6 +412,33 @@ class MongoPipeline:
                 spider.logger.warning(
                     f"Removed stale Google data from {name}: match now refused."
                 )
+            elif not google_data_fresh:
+                # No Google data this run, and no refusal to act on either — so
+                # this pass knows NOTHING about the rating. Leave whatever a
+                # previous successful run stored completely alone.
+                #
+                # Without this, re-crawling with GOOGLE_MAPS_API_KEY unset (or
+                # after a timeout, or with the quota spent) wrote averageRating
+                # 0.0 and reviewCount 0 over a real "4.7 from 63 reviews", while
+                # ratingSource stayed "google" — a centre losing its rating to an
+                # error that had nothing to do with the rating.
+                #
+                # It also stops a fresh 0.0 being invented on a record that never
+                # had Google data, which is the whole point of the note beside
+                # GOOGLE_ONLY_FIELDS: absent shows "No reviews yet", 0.0 shows a
+                # real-looking zero score.
+                for field in GOOGLE_ONLY_FIELDS:
+                    doc.pop(field, None)
+
+            # Recompute the flag against the record as it will be AFTER this
+            # update, not as the spider found it. The insert path below sets
+            # needsEnrichment; this path never did, so a centre that gained
+            # coordinates or subjects on a later pass stayed in the admin
+            # "Missing details" queue for a gap that was already filled.
+            merged = {**existing, **doc}
+            for field in update.get("$unset", {}):
+                merged.pop(field, None)
+            doc['needsEnrichment'] = needs_enrichment(merged)
 
             self.db['tuitioncentres'].update_one({"_id": existing["_id"]}, update)
             spider.logger.info(f"Updated existing centre in DB: {name}")

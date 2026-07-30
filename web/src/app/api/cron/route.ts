@@ -3,6 +3,7 @@ import dbConnect from '@/lib/db';
 import { CrawlSchedule, SINGLETON_KEY } from '@/models/CrawlSchedule';
 import { isCrawlDue } from '@/lib/crawl-schedule';
 import { runCrawl } from '@/services/crawlRunner';
+import { sweepUnsyncedCentres } from '@/services/autoSync';
 
 /**
  * The scheduler's knock.
@@ -66,15 +67,40 @@ export async function GET(request: Request) {
 
     const result = await runCrawl('cron');
 
+    // Catch up on centres that could not be synced when they were found.
+    //
+    // Two discovery paths cannot do it inline: the Python Scrapy crawler writes
+    // straight to MongoDB and has no way to reach Gemini, and the chat-facing
+    // discovery skips the per-place lookup that would tell it the website. Without
+    // this those centres would wait for an admin to press a button, which is what
+    // the automatic sync exists to avoid. A handful per run, oldest attempt first
+    // — see sweepUnsyncedCentres in services/autoSync.ts.
+    //
+    // Fails soft: a sweep problem must not turn a successful crawl into a reported
+    // failure, so its own errors are logged and the crawl's result stands.
+    let swept = { attempted: 0, updated: 0, failed: 0 };
+    try {
+      swept = await sweepUnsyncedCentres('cron-sweep');
+    } catch (sweepError: unknown) {
+      const reason = sweepError instanceof Error ? sweepError.message : String(sweepError);
+      console.warn('[cron]', `Catch-up sync did not finish: ${reason}. The crawl itself was unaffected.`);
+    }
+
+    const summary =
+      swept.updated > 0
+        ? `${result.summary} Also filled in ${swept.updated} older centre${swept.updated === 1 ? "" : "s"} from their own websites.`
+        : result.summary;
+
     await CrawlSchedule.updateOne(
       { key: SINGLETON_KEY },
-      { $set: { lastRunSummary: result.summary, lastRunOk: result.ok } }
+      { $set: { lastRunSummary: summary, lastRunOk: result.ok } }
     );
 
     return NextResponse.json({
       success: result.ok,
       reason: verdict.reason,
-      summary: result.summary,
+      summary,
+      caughtUp: swept,
       area: result.area,
       added: result.added,
       autoPublished: result.autoPublished,

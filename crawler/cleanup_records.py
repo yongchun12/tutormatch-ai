@@ -35,8 +35,12 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../web/.en
 # Fields that only ever come from a Google Places match. When the match is
 # refused these are removed outright rather than zeroed, so the centre page
 # shows "No reviews yet" instead of a real-looking 0.0 rating.
+#
+# Must stay identical to GOOGLE_ONLY_FIELDS in crawler/pipelines.py. It was
+# missing "ratingSource", so stripping a wrongly-borrowed rating left the record
+# claiming ratingSource "google" with no rating to attribute to it.
 GOOGLE_FIELDS = [
-    "averageRating", "reviewCount", "googlePlaceId",
+    "averageRating", "reviewCount", "ratingSource", "googlePlaceId",
     "latitude", "longitude", "location", "logoUrl",
 ]
 

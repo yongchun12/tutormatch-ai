@@ -15,9 +15,12 @@
     "seed:test": "MONGODB_DB=tutormatch_test tsx scripts/seed.ts",
     "wipe:test": "MONGODB_DB=tutormatch_test tsx scripts/wipe_db.ts",
     "cron:test": "MONGODB_DB=tutormatch_test tsx scripts/local_cron.ts",
+    "seed:users": "tsx scripts/seed_users.ts",
+    "reset": "npm run wipe && npm run seed:users && npm run db:which",
     "db:which": "tsx scripts/which_db.ts",
     "export:snapshot": "tsx scripts/export_snapshot.ts",
     "figures": "tsx scripts/results_figures.ts",
+    "reviews:import": "tsx scripts/import_google_reviews.ts",
     "example:ranking": "tsx scripts/ranking_example.ts"
   },
   "dependencies": {

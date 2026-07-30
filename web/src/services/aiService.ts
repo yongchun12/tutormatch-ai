@@ -104,12 +104,36 @@ function toRecommendation(s: ScoredCentre): Recommendation {
 // (that needs its trained corpus), but keeps the same output contract and
 // polarity thresholds so review scoring keeps working without the microservice.
 
+/*
+  Vocabulary note — read before quoting any accuracy figure.
+
+  The second block of each list below was added after importing 75 real Google
+  reviews of tuition centres and finding that 5 of them matched NO lexicon word
+  at all, so they defaulted to "neutral" despite being plainly enthusiastic:
+  "the teachers are all very caring", "all the teachers here are very engaging",
+  "a truly responsible and conscientious teacher". The original list was written
+  for generic product reviews and simply had no word for how people praise a
+  teacher.
+
+  The additions are ordinary education-domain sentiment words, defensible without
+  reference to any particular review. But they were chosen AFTER looking at that
+  sample, so measuring accuracy on those same 75 reviews would be measuring the
+  lexicon against the data used to build it. A clean figure needs a fresh import —
+  275 more matched centres are available.
+*/
 const POSITIVE_WORDS = new Set([
   "good", "great", "excellent", "amazing", "awesome", "wonderful", "fantastic",
   "helpful", "friendly", "patient", "clear", "recommend", "recommended", "best",
   "love", "loved", "like", "nice", "perfect", "superb", "brilliant", "happy",
   "satisfied", "improved", "improvement", "supportive", "knowledgeable",
   "professional", "affordable", "worth", "effective", "outstanding", "positive",
+
+  // How people actually praise teaching.
+  "caring", "engaging", "dedicated", "responsible", "conscientious", "thorough",
+  "encouraging", "motivating", "motivated", "attentive", "experienced", "kind",
+  "understanding", "interesting", "fun", "enjoyable", "confidence", "progress",
+  "progressed", "grateful", "thankful", "welcoming", "organised", "organized",
+  "passionate", "committed", "approachable", "supported", "excel", "excelled",
 ]);
 
 const NEGATIVE_WORDS = new Set([
@@ -118,6 +142,11 @@ const NEGATIVE_WORDS = new Set([
   "boring", "slow", "unprofessional", "hate", "hated", "dislike", "useless",
   "negative", "avoid", "overpriced", "late", "unclear", "difficult", "rushed",
   "ineffective", "mediocre", "lacking", "problem", "problems", "complaint",
+
+  // Complaints specific to a tuition centre.
+  "unresponsive", "disorganised", "disorganized", "cancelled", "crowded",
+  "noisy", "inattentive", "unqualified", "careless", "neglected", "ignored",
+  "refund", "scam", "regret", "misleading", "arrogant", "impatient", "messy",
 ]);
 
 const NEGATIONS = new Set([

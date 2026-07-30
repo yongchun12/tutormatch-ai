@@ -61,6 +61,18 @@ export interface ITuitionCentre extends Document {
    */
   needsEnrichment?: boolean;
   /**
+   * When the AI website sync last TRIED this centre — success or failure.
+   *
+   * Stamped on every attempt, which is the point. A failed sync does not save the
+   * document, so `updatedAt` does not move, and a sweep that ordered by
+   * `updatedAt` would pick the same dead website first on every single run and
+   * spend the Gemini quota re-failing on it forever. This field always moves, so
+   * a centre that cannot be read steps aside for one that has not been tried.
+   *
+   * Absent means never attempted.
+   */
+  lastSyncAttemptAt?: Date;
+  /**
    * Where this record was FIRST discovered. Set once at creation and never
    * rewritten by enrichment — the quality gate's directory exemption depends on
    * it still being true after Google Places has filled in a place ID.
@@ -118,6 +130,9 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
     googlePlaceId: { type: String },
     isVerified: { type: Boolean, default: false },
     needsEnrichment: { type: Boolean, default: false },
+    // No default: "never attempted" must be distinguishable from "attempted at
+    // the epoch", because the background sweep prefers never-tried centres.
+    lastSyncAttemptAt: { type: Date },
     discoverySource: {
       type: String,
       enum: ["google-places", "directory", "owner", "admin"],
@@ -153,6 +168,9 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
 TuitionCentreSchema.index({ location: "2dsphere" });
 // Drives the admin dashboard's "listings missing subjects" queue.
 TuitionCentreSchema.index({ needsEnrichment: 1, status: 1 });
+// Drives the background sync sweep: incomplete centres, least recently attempted
+// first. Ascending on lastSyncAttemptAt so never-attempted (missing) sorts first.
+TuitionCentreSchema.index({ needsEnrichment: 1, lastSyncAttemptAt: 1 });
 
 export const TuitionCentre: Model<ITuitionCentre> = 
   mongoose.models.TuitionCentre || mongoose.model<ITuitionCentre>("TuitionCentre", TuitionCentreSchema);
