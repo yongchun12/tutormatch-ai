@@ -17,7 +17,14 @@ interface EnquiryModalProps {
   enquiryId: string;
   currentStatus: string;
   currentReply: string;
-  triggerButton: React.ReactNode;
+  /**
+   * A SINGLE element to render as the trigger — normally a <Button>. It is
+   * handed to DialogTrigger's `render` prop, not nested inside it, so exactly
+   * one <button> element reaches the DOM. Typed ReactElement rather than
+   * ReactNode for that reason: `render` cannot merge into a fragment or a
+   * string, and ReactNode would let a caller pass one without a type error.
+   */
+  triggerButton: React.ReactElement;
 }
 
 export default function EnquiryModal({ enquiryId, currentStatus, currentReply, triggerButton }: EnquiryModalProps) {
@@ -49,9 +56,15 @@ export default function EnquiryModal({ enquiryId, currentStatus, currentReply, t
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger>
-        <div>{triggerButton}</div>
-      </DialogTrigger>
+      {/*
+        DialogTrigger renders its own <button>. Passing the trigger as CHILDREN
+        put our <Button> inside that button, producing nested <button> elements —
+        invalid HTML that React reports as "<button> cannot be a descendant of
+        <button>". `render` merges the trigger's behaviour (onClick, aria-*, ref)
+        into the element we supply instead of wrapping it, so only one button
+        is produced. Same fix as components/ui/action-modal.tsx.
+      */}
+      <DialogTrigger render={triggerButton} />
       <DialogContent className="sm:max-w-[425px] rounded-3xl">
         <DialogHeader>
           <DialogTitle className="font-heading">Update Enquiry</DialogTitle>
