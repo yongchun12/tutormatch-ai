@@ -4,6 +4,7 @@ import { TuitionCentre } from "@/models/TuitionCentre";
 import { requireAdmin, authorizationErrorResponse } from "@/lib/authz";
 import { applyQualityGate } from "@/services/qualityGateService";
 import { autoSyncCentre } from "@/services/autoSync";
+import { autoImportReviews } from "@/services/autoReviews";
 import { parseMalaysianAddress } from "@/lib/address";
 import { formatLocation, formatTeachingMode } from "@/lib/centre-display";
 import { extractSubjectsFromText } from "@/services/scraperService";
@@ -247,6 +248,10 @@ export async function GET(req: NextRequest) {
         // Read the centre's own website straight away, so nobody has to press AI
         // Sync for something this crawl just found. Fails soft — see autoSync.ts.
         await autoSyncCentre(newRecord._id.toString(), place.website, "ondemand");
+
+        // …and import its Google reviews through the sentiment model, so the
+        // centre page has an analysed summary the first time anyone opens it.
+        await autoImportReviews(newRecord._id.toString(), place.place_id, "ondemand");
 
         // Judge the enriched record. Re-read it: the sync saved its own copy, so
         // `newRecord` is stale, and the response below must show what was stored.

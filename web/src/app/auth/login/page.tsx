@@ -231,15 +231,6 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <div className="mt-6 p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 text-xs text-indigo-800 dark:text-indigo-300">
-          <p className="font-bold mb-1">Showcase Credentials (Password: password123):</p>
-          <ul className="space-y-1 ml-2">
-            <li>• student@tuition.com → Student Dashboard</li>
-            <li>• owner@tuition.com → Owner Dashboard</li>
-            <li>• admin@tuition.com → Admin Dashboard</li>
-          </ul>
-        </div>
-
         <p className="text-center mt-8 text-slate-500 dark:text-slate-400">
           Don&apos;t have an account?{" "}
           <Link href="/auth/register" className="text-indigo-600 dark:text-indigo-400 font-medium hover:underline">

@@ -11,6 +11,11 @@ from crawler.text_clean import decode_entities, fix_mojibake, detect_teaching_mo
 # collection: a keyword changed on one side only means the same centre gets
 # different subjects depending on which crawler happened to find it.
 #
+# The names on the LEFT must be the canonical ones in web/src/lib/subjects.ts.
+# This spider writes to MongoDB directly, so nothing canonicalises what it
+# stores — a label only used here becomes its own checkbox in the directory's
+# Subjects filter, sitting beside the same subject under its proper name.
+#
 # Note the padding on " bm " and the absence of a bare "malay". Matching is by
 # substring below, so an unpadded "bm" would fire on "BMW" and "malay" would fire
 # on "Malaysia" — which appears in almost every Malaysian address and review. The
@@ -27,7 +32,9 @@ SUBJECT_KEYWORDS = {
     # and also ordinary English ("a long history of good results"). "sejarah" is
     # unambiguous. A centre that only ever writes "History" now yields no subject
     # and is flagged for enrichment, rather than tagged from a guess.
-    "Sejarah": ["sejarah"],
+    # Stored as "History" — the canonical name — even though only the Malay
+    # keyword is safe to match on.
+    "History": ["sejarah"],
     # Bare "account" dropped for the same reason: it fires on "my account" and
     # "on account of". "accounting" and "akaun" carry the subject.
     "Accounting": ["accounting", "akaun", "akaun perniagaan"],

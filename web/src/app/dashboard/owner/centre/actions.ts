@@ -2,6 +2,7 @@
 
 import { requireRole } from "@/lib/authz";
 import { needsEnrichment, hasUsableAddress } from "@/lib/quality-gate";
+import { parseSubjectsInput } from "@/lib/subjects";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { revalidatePath } from "next/cache";
@@ -29,7 +30,9 @@ export async function updateCentreAction(centreId: string, formData: FormData) {
     const subjectsStr = formData.get("subjects") as string;
     const galleryUrlsStr = formData.get("galleryUrls") as string;
 
-    const subjects = subjectsStr ? subjectsStr.split(",").map(s => s.trim()).filter(Boolean) : [];
+    // Canonical names, so "Add Maths" typed here lands under the same filter as
+    // the "Additional Mathematics" the crawler and the website sync write.
+    const subjects = parseSubjectsInput(subjectsStr);
     
     let galleryUrls: string[] = [];
     try {

@@ -4,6 +4,7 @@ import { CrawlSchedule, SINGLETON_KEY } from '@/models/CrawlSchedule';
 import { isCrawlDue } from '@/lib/crawl-schedule';
 import { runCrawl } from '@/services/crawlRunner';
 import { sweepUnsyncedCentres } from '@/services/autoSync';
+import { sweepUnimportedReviews } from '@/services/autoReviews';
 
 /**
  * The scheduler's knock.
@@ -50,10 +51,38 @@ export async function GET(request: Request) {
       new Date()
     );
 
+    // Catch up on centres whose Google reviews have never been through the
+    // sentiment model.
+    //
+    // DELIBERATELY ABOVE THE `due` CHECK, unlike the website sweep further down.
+    // A crawl is due at most once a day on the default schedule, and this sweep
+    // does ten centres at a time — behind that gate, a directory of a hundred-odd
+    // centres would take a fortnight to finish analysing, and every page in the
+    // meantime would still say the reviews had not been imported. Running it on
+    // every ten-minute knock clears the same backlog in a couple of hours.
+    //
+    // Safe to run that often because it is self-terminating: the query only
+    // matches centres never imported (or last imported outside the retry window),
+    // so once the backlog is gone each knock costs one indexed lookup and no
+    // Google quota at all.
+    //
+    // Fails soft: a sweep problem must never turn a healthy cron into an error.
+    let reviewsSwept = { attempted: 0, imported: 0, failed: 0 };
+    try {
+      reviewsSwept = await sweepUnimportedReviews('cron-reviews');
+    } catch (reviewError: unknown) {
+      const reason = reviewError instanceof Error ? reviewError.message : String(reviewError);
+      console.warn('[cron]', `Catch-up review import did not finish: ${reason}. Nothing else was affected.`);
+    }
+
     if (!verdict.due) {
       // Deliberately quiet. The local scheduler knocks every ten minutes, so
       // announcing every skip would bury the runs that actually did something.
-      return NextResponse.json({ skipped: true, reason: verdict.reason });
+      return NextResponse.json({
+        skipped: true,
+        reason: verdict.reason,
+        reviewsCaughtUp: reviewsSwept,
+      });
     }
 
     // Claim the slot BEFORE crawling. Two knocks arriving close together would
@@ -86,10 +115,19 @@ export async function GET(request: Request) {
       console.warn('[cron]', `Catch-up sync did not finish: ${reason}. The crawl itself was unaffected.`);
     }
 
-    const summary =
-      swept.updated > 0
-        ? `${result.summary} Also filled in ${swept.updated} older centre${swept.updated === 1 ? "" : "s"} from their own websites.`
-        : result.summary;
+    const summaryParts = [result.summary];
+    if (swept.updated > 0) {
+      summaryParts.push(
+        `Also filled in ${swept.updated} older centre${swept.updated === 1 ? "" : "s"} from their own websites.`
+      );
+    }
+    if (reviewsSwept.imported > 0) {
+      summaryParts.push(
+        `Analysed ${reviewsSwept.imported} Google review${reviewsSwept.imported === 1 ? "" : "s"} ` +
+          `across ${reviewsSwept.attempted} centre${reviewsSwept.attempted === 1 ? "" : "s"}.`
+      );
+    }
+    const summary = summaryParts.join(" ");
 
     await CrawlSchedule.updateOne(
       { key: SINGLETON_KEY },
@@ -101,6 +139,7 @@ export async function GET(request: Request) {
       reason: verdict.reason,
       summary,
       caughtUp: swept,
+      reviewsCaughtUp: reviewsSwept,
       area: result.area,
       added: result.added,
       autoPublished: result.autoPublished,

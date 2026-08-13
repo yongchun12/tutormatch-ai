@@ -4,6 +4,7 @@ import * as cheerio from "cheerio";
 import { GoogleGenAI } from "@google/genai";
 import { checkPublicUrl, describeRejection } from "@/lib/url-safety";
 import { needsEnrichment } from "@/lib/quality-gate";
+import { canonicalSubjects } from "@/lib/subjects";
 import { isCrawlAllowed, USER_AGENT_STRING } from "@/services/robotsService";
 
 /** Give up on a slow website rather than holding the request open forever. */
@@ -153,8 +154,16 @@ export async function syncCentreData(centreId: string) {
         // 4. Update the Database
         let updated = false;
 
-        if (data.subjects && Array.isArray(data.subjects) && data.subjects.length > 0) {
-            centre.subjects = data.subjects;
+        /*
+          Gemini copies whatever the centre's own site calls each subject, which
+          is the noisiest source of duplicate filter entries in the directory —
+          "Mathematics - Additional", "Matematik Tambahan" and "Add Math" all
+          came from here. canonicalSubjects() folds them onto one name and drops
+          repeats; anything outside the vocabulary is still stored as written.
+        */
+        const extractedSubjects = canonicalSubjects(data.subjects);
+        if (extractedSubjects.length > 0) {
+            centre.subjects = extractedSubjects;
             updated = true;
         }
         

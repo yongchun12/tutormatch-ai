@@ -16,7 +16,16 @@ export default async function OwnerCentrePage() {
     }
 
     await dbConnect();
-    const centres = await TuitionCentre.find({ ownerId: (session.user as any).id }).limit(1).lean();
+    const centres = await TuitionCentre.find({ ownerId: (session.user as any).id })
+    // Oldest first. The limit(1) had no sort, so an account that ended up
+    // with two centres saw whichever one Mongo happened to return — and a
+    // different one could surface on a later request. One centre per owner
+    // is now enforced when claiming, but existing data and admin-assigned
+    // ownership can still produce a second, and picking arbitrarily is the
+    // one behaviour that leaves nobody able to say which centre they edited.
+    .sort({ createdAt: 1 })
+    .limit(1)
+    .lean();
     const centre = centres[0];
 
     if (!centre) {

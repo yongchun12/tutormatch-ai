@@ -91,7 +91,10 @@ async function main() {
 
   console.log(`Centres matched to Google : ${candidates.length}`);
   console.log(`This run will process     : ${targets.length}`);
-  console.log(`Google Places calls       : ${dry ? 0 : targets.length}  (1 per centre)\n`);
+  // Two calls per centre, not one: the import asks for both review sort orders
+  // and stores the union, because each order returns a different five texts.
+  // See services/googleReviewImport.ts.
+  console.log(`Google Places calls       : ${dry ? 0 : targets.length * 2}  (2 per centre — both sort orders)\n`);
 
   if (dry) {
     targets.slice(0, 20).forEach((c: any, i) => console.log(`  ${String(i + 1).padStart(3)}. ${c.name}`));

@@ -67,12 +67,65 @@ interface GooglePlaceReview {
 }
 
 /**
+ * The stable identity of one Google review, used both to merge the two sort
+ * orders in memory and as the `externalId` stored against the review.
+ *
+ * Defined once because the two must agree: if the union deduped on a different
+ * key than the database does, the same review would be stored twice.
+ */
+const reviewKey = (raw: GooglePlaceReview): string =>
+  `google:${raw.time ?? (raw.text ?? "").trim().slice(0, 40)}`;
+
+/**
+ * Ask Google for one page of review texts, under a given sort order.
+ *
+ * Returns [] on any failure so the caller can try the other sort — one refused
+ * request should not lose the reviews the other one would have returned.
+ */
+async function fetchReviewPage(
+  placeId: string,
+  apiKey: string,
+  sort: "most_relevant" | "newest"
+): Promise<{ reviews: GooglePlaceReview[]; status: string }> {
+  const url =
+    `https://maps.googleapis.com/maps/api/place/details/json` +
+    `?place_id=${encodeURIComponent(placeId)}&fields=reviews` +
+    `&reviews_sort=${sort}&key=${apiKey}`;
+
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    const status = typeof data.status === "string" ? data.status : "UNKNOWN";
+    if (status !== "OK" && status !== "ZERO_RESULTS") return { reviews: [], status };
+    return {
+      reviews: Array.isArray(data.result?.reviews) ? data.result.reviews : [],
+      status,
+    };
+  } catch (error) {
+    console.error(`[google-reviews] fetch failed (${sort})`, error);
+    return { reviews: [], status: "FETCH_FAILED" };
+  }
+}
+
+/**
  * Import the reviews Google will give us for one centre.
  *
- * Google Places Details returns at most FIVE review texts per place, regardless
- * of how many ratings the place actually has. That is an API limit, not a bug
- * here, and it is why the UI must never present the imported sample as though it
- * were the whole picture.
+ * HOW MUCH OF A CENTRE'S REVIEWS THIS CAN EVER SEE. Google Places Details
+ * returns at most FIVE review texts per request, however many ratings the place
+ * has, and it chooses which five. That is an API limit, not something this code
+ * can page past — a centre with 44 ratings averaging 3.7 stars still hands back
+ * five 5-star reviews. The UI must never present the sample as the whole
+ * picture, and no figure computed from it is a figure about "all the reviews".
+ *
+ * What IS in our control is asking twice. The two sort orders return different,
+ * overlapping sets — checked against this database, `most_relevant` surfaced a
+ * 1-star review for one centre that `newest` did not return at all, and `newest`
+ * surfaced recent reviews `most_relevant` had dropped. Taking the union of both
+ * widens the sample to up to ten texts, and because stored reviews are deduped
+ * on `externalId`, each later run adds whatever Google has started returning
+ * since. Repeat imports accumulate; they do not just re-read the same five.
+ *
+ * Cost: two Places Details calls per centre instead of one.
  */
 export async function importGoogleReviewsForCentre(
   centreId: string
@@ -90,22 +143,27 @@ export async function importGoogleReviewsForCentre(
     return empty(`"${centre.name}" is not matched to a Google Maps listing, so it has no Google reviews to read.`);
   }
 
-  const url =
-    `https://maps.googleapis.com/maps/api/place/details/json` +
-    `?place_id=${encodeURIComponent(centre.googlePlaceId)}&fields=reviews&key=${apiKey}`;
+  // Sequential, not parallel: two calls a fraction of a second apart are kinder
+  // to the per-second quota than two at once, and this runs inside a sweep that
+  // is already doing one centre at a time.
+  const relevant = await fetchReviewPage(centre.googlePlaceId, apiKey, "most_relevant");
+  const newest = await fetchReviewPage(centre.googlePlaceId, apiKey, "newest");
 
-  let reviews: GooglePlaceReview[] = [];
-  try {
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.status && data.status !== "OK" && data.status !== "ZERO_RESULTS") {
-      return empty(`Google refused the request for "${centre.name}" (${data.status}).`);
-    }
-    reviews = Array.isArray(data.result?.reviews) ? data.result.reviews : [];
-  } catch (error) {
-    console.error("[google-reviews] fetch failed", error);
-    return empty(`Could not reach Google to read reviews for "${centre.name}".`);
+  if (relevant.status !== "OK" && newest.status !== "OK") {
+    // Both refused, so there is nothing to report but the refusal.
+    const status = relevant.status === "UNKNOWN" ? newest.status : relevant.status;
+    return status === "ZERO_RESULTS"
+      ? empty(`Google returned no reviews for "${centre.name}".`, true)
+      : empty(`Google refused the request for "${centre.name}" (${status}).`);
   }
+
+  // Union of the two sorts, keyed the same way the stored copy is, so a review
+  // both orders returned is imported once.
+  const byKey = new Map<string, GooglePlaceReview>();
+  for (const raw of [...relevant.reviews, ...newest.reviews]) {
+    byKey.set(reviewKey(raw), raw);
+  }
+  const reviews = [...byKey.values()];
 
   const result = empty("", true);
   result.returned = reviews.length;
@@ -122,7 +180,7 @@ export async function importGoogleReviewsForCentre(
       continue;
     }
 
-    const externalId = `google:${raw.time ?? text.slice(0, 40)}`;
+    const externalId = reviewKey(raw);
 
     const existing = await Review.findOne({ centreId, externalId }).select("_id").lean();
     if (existing) {

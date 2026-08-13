@@ -2,7 +2,9 @@ import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { applyQualityGate } from "@/services/qualityGateService";
 import { autoSyncCentre } from "@/services/autoSync";
+import { autoImportReviews } from "@/services/autoReviews";
 import { parseMalaysianAddress, toSearchArea } from "@/lib/address";
+import { canonicalSubjects } from "@/lib/subjects";
 
 // ---------------------------------------------------------------------------
 // Lightweight, chat-facing live discovery.
@@ -79,7 +81,11 @@ export function extractSubjectsFromText(text: string): string[] {
   for (const [subject, pattern] of SUBJECT_PATTERNS) {
     if (pattern.test(text)) found.add(subject);
   }
-  return Array.from(found);
+  // Through lib/subjects.ts so the labels above are the crawler's business
+  // alone: "Sejarah" is stored as History, the same name the admin form and
+  // the website sync produce, instead of a second checkbox in the directory's
+  // Subjects filter.
+  return canonicalSubjects(Array.from(found));
 }
 
 function mapPriceLevel(level: number | undefined): string {
@@ -281,7 +287,9 @@ export async function discoverAndSyncCentres(
   let discovered = 0;
 
   /** New centres to read the website of, once they all exist in the database. */
-  const freshlyCreated: Array<{ id: string; website: string; name: string }> = [];
+  // googlePlaceId is carried alongside the website so the review import below can
+  // run from the same batch, without re-reading every document to find it.
+  const freshlyCreated: Array<{ id: string; website: string; name: string; placeId?: string }> = [];
 
   for (const { place, website, phone } of detailed) {
     // `candidates` already dropped every result without a name, but the type
@@ -375,7 +383,7 @@ export async function discoverAndSyncCentres(
         location: hasPoint ? { type: "Point", coordinates: [lng!, lat!] } : undefined,
       });
 
-      freshlyCreated.push({ id: created._id.toString(), website, name });
+      freshlyCreated.push({ id: created._id.toString(), website, name, placeId: place.place_id });
       discovered++;
     }
   }
@@ -392,6 +400,22 @@ export async function discoverAndSyncCentres(
   if (PUBLIC_SEARCH_READS_WEBSITES && freshlyCreated.length > 0) {
     await mapWithConcurrency(freshlyCreated, SYNC_CONCURRENCY, (centre) =>
       autoSyncCentre(centre.id, centre.website, "visitor-search")
+    );
+  }
+
+  /*
+    Import and sentiment-score the Google reviews for the same batch.
+
+    Separate from the sync above, and NOT behind PUBLIC_SEARCH_READS_WEBSITES:
+    that switch guards fetching a third-party website and calling Gemini, which
+    is the slow, failure-prone half. This is one Google Places Details call per
+    centre against an API we are already talking to. Without it a brand-new
+    centre's page fetches its reviews live on every request and shows them
+    unanalysed, which is the sentiment feature silently switched off.
+  */
+  if (freshlyCreated.length > 0) {
+    await mapWithConcurrency(freshlyCreated, SYNC_CONCURRENCY, (centre) =>
+      autoImportReviews(centre.id, centre.placeId, "visitor-search")
     );
   }
 
@@ -554,6 +578,10 @@ export async function scrapeLocation(locationQuery: string) {
                 // Read the centre's own website now, so an admin never has to
                 // press AI Sync for a centre this crawl just found.
                 await autoSyncCentre(created._id.toString(), website, "admin-scrape");
+
+                // …and import its Google reviews through the sentiment model, so
+                // an admin never has to run `npm run reviews:import` either.
+                await autoImportReviews(created._id.toString(), place.place_id, "admin-scrape");
 
                 // Judge the enriched record. Re-read it because the sync saved its
                 // own copy of the document — `created` is stale by this point.

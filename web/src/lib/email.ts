@@ -3,48 +3,157 @@ import nodemailer, { type Transporter } from "nodemailer";
 /**
  * Email sending (activation + password reset).
  *
- * Transport is chosen from the environment:
- *   • If SMTP_HOST is set, real SMTP is used (Gmail, Mailtrap, SES-SMTP, …).
- *     This is how emails are delivered to real inboxes — including
- *     `<namespace>.<tag>@inbox.testmail.app` addresses for testmail.app testing.
- *   • Otherwise a Nodemailer "Ethereal" test account is created on the fly:
- *     nothing is actually delivered, but a preview URL is logged so the flow
- *     works with zero configuration during development.
+ * This is the ONLY module in the project that sends mail, so whatever it
+ * resolves is what every email uses — there is no second transport anywhere to
+ * disagree with it.
  *
- * NOTE: testmail.app itself only RECEIVES mail (for test assertions via its
- * API) — it is not a sender, so an SMTP sender is always required to deliver.
+ * Transport is chosen from the environment, and the choice is deliberately
+ * all-or-nothing:
+ *   • SMTP_HOST set  -> that server is used, always. Mailtrap, Gmail, SES-SMTP.
+ *     SMTP_USER and SMTP_PASS are then REQUIRED; a missing one is an error
+ *     naming the variable, never a quiet fall back to something else.
+ *   • SMTP_HOST unset -> a Nodemailer "Ethereal" test account, which delivers
+ *     nothing anywhere and logs a preview URL, so the flow still works with no
+ *     configuration at all.
+ *
+ * The one thing that must never happen is the middle case: configured to reach
+ * an inbox, quietly sending somewhere else. Run `npm run email:check` to see
+ * which of the two is live and to put a real message in the inbox.
  */
 
-let transportPromise: Promise<Transporter> | null = null;
+/**
+ * What the environment currently says the transport should be.
+ *
+ * Exported so a check command (scripts/email_check.ts) and the app agree on
+ * what "configured" means, instead of each deciding for itself.
+ */
+export interface TransportConfig {
+  kind: "smtp" | "ethereal";
+  host: string;
+  port: number;
+  secure: boolean;
+  /** Truncated for logging. The password is never returned or printed. */
+  user: string | null;
+  /** Set when SMTP is configured but unusable — the reason, in one sentence. */
+  problem: string | null;
+}
+
+export function resolveTransportConfig(): TransportConfig {
+  const host = process.env.SMTP_HOST?.trim();
+
+  if (!host) {
+    return {
+      kind: "ethereal",
+      host: "smtp.ethereal.email",
+      port: 587,
+      secure: false,
+      user: null,
+      problem: null,
+    };
+  }
+
+  const user = process.env.SMTP_USER?.trim() || "";
+  const pass = process.env.SMTP_PASS?.trim() || "";
+
+  /*
+    Half-configured SMTP is treated as an error, not as "no auth".
+
+    Every SMTP service this project can realistically use — Mailtrap, Gmail,
+    SES — requires a username and password. Sending without them does not fall
+    back to anything useful; it fails at the server, and that failure was
+    previously swallowed by the callers. Naming the missing variable is the
+    whole point: a blank SMTP_PASS and a wrong SMTP_PASS produce very similar
+    silence otherwise.
+  */
+  const missing = [!user && "SMTP_USER", !pass && "SMTP_PASS"].filter(Boolean);
+
+  return {
+    kind: "smtp",
+    host,
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: process.env.SMTP_SECURE === "true", // true for port 465
+    user: user || null,
+    problem: missing.length
+      ? `SMTP_HOST is set to "${host}" but ${missing.join(" and ")} ${missing.length > 1 ? "are" : "is"} empty, so the server will reject the login.`
+      : null,
+  };
+}
+
+/**
+ * The transport, cached — but keyed on the configuration that produced it.
+ *
+ * The cache used to be a bare promise, which pinned the FIRST choice for the
+ * lifetime of the process. Start `npm run dev`, then fix SMTP_PASS in
+ * .env.local, and every email for the rest of that session still went to the
+ * transport chosen before the fix. Keying on the config means a changed
+ * variable builds a new transport instead of being ignored.
+ */
+let cached: { key: string; promise: Promise<Transporter> } | null = null;
+
+/** Identity of the current config. The password is reduced to set/unset. */
+function configKey(config: TransportConfig): string {
+  return [
+    config.kind,
+    config.host,
+    config.port,
+    config.secure,
+    config.user ?? "",
+    process.env.SMTP_PASS ? "pass:set" : "pass:unset",
+  ].join("|");
+}
 
 async function getTransport(): Promise<Transporter> {
-  if (!transportPromise) {
-    transportPromise = (async () => {
-      if (process.env.SMTP_HOST) {
-        return nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: Number(process.env.SMTP_PORT || 587),
-          secure: process.env.SMTP_SECURE === "true", // true for port 465
-          auth: process.env.SMTP_USER
-            ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-            : undefined,
-        });
-      }
+  const config = resolveTransportConfig();
+  const key = configKey(config);
 
-      // Dev fallback — no credentials needed, prints a preview link to the console.
-      const testAccount = await nodemailer.createTestAccount();
-      console.warn(
-        "[email] SMTP_HOST not set — using an Ethereal test account (no real delivery). Set SMTP_* to deliver for real."
+  if (cached?.key === key) return cached.promise;
+
+  const promise = (async (): Promise<Transporter> => {
+    if (config.kind === "smtp") {
+      if (config.problem) throw new Error(`[email] ${config.problem}`);
+
+      /*
+        Announce the transport once, on first use.
+
+        Until this line existed there was no way to tell from the server console
+        whether mail was going to the configured SMTP server or to the Ethereal
+        fallback below, which delivers to nobody. "I registered and no email
+        arrived" then had two completely different causes and no evidence to
+        separate them. The username is truncated; the password is never printed.
+      */
+      console.log(
+        `[email] transport: SMTP ${config.host}:${config.port} (secure=${config.secure}) as ${config.user?.slice(0, 4)}…`
       );
+
       return nodemailer.createTransport({
-        host: "smtp.ethereal.email",
-        port: 587,
-        secure: false,
-        auth: { user: testAccount.user, pass: testAccount.pass },
+        host: config.host,
+        port: config.port,
+        secure: config.secure,
+        auth: { user: config.user!, pass: process.env.SMTP_PASS! },
       });
-    })();
-  }
-  return transportPromise;
+    }
+
+    /*
+      Zero-config dev fallback: nothing is delivered anywhere, a preview link is
+      printed instead. Reached ONLY when SMTP_HOST is unset — a configured host
+      never silently degrades to this, because a test inbox that quietly
+      receives nothing is indistinguishable from a broken one.
+    */
+    const testAccount = await nodemailer.createTestAccount();
+    console.warn(
+      "[email] SMTP_HOST is not set — using an Ethereal test account. NOTHING IS DELIVERED, " +
+        "including to Mailtrap. Set SMTP_HOST/PORT/USER/PASS in web/.env.local and restart to deliver for real."
+    );
+    return nodemailer.createTransport({
+      host: "smtp.ethereal.email",
+      port: 587,
+      secure: false,
+      auth: { user: testAccount.user, pass: testAccount.pass },
+    });
+  })();
+
+  cached = { key, promise };
+  return promise;
 }
 
 function baseUrl(): string {
@@ -53,14 +162,50 @@ function baseUrl(): string {
 
 const FROM = process.env.EMAIL_FROM || '"TutorMatch" <no-reply@tutormatch.app>';
 
+/**
+ * Send one message, and say so in the log either way.
+ *
+ * Every caller of this wraps it in a try/catch that swallows the error on
+ * purpose — a mail hiccup must not fail a registration — so this is the ONLY
+ * place a delivery problem can be recorded. It used to log just a preview URL,
+ * which exists only for the Ethereal fallback; against a real SMTP server a
+ * successful send and a rejected recipient both printed nothing at all.
+ *
+ * `rejected` matters as much as a thrown error: an SMTP server can accept the
+ * message and still refuse the address, in which case nodemailer resolves
+ * normally and nothing is delivered.
+ */
 async function send(to: string, subject: string, html: string) {
-  const transport = await getTransport();
-  const info = await transport.sendMail({ from: FROM, to, subject, html });
-  const previewUrl = nodemailer.getTestMessageUrl(info) || null;
-  if (previewUrl) {
-    console.log(`[email] "${subject}" → ${to} · preview: ${previewUrl}`);
+  try {
+    // Inside the try: building the transport can itself fail (half-configured
+    // SMTP), and that failure deserves the same log line as a refused send.
+    const transport = await getTransport();
+    const info = await transport.sendMail({ from: FROM, to, subject, html });
+    const previewUrl = nodemailer.getTestMessageUrl(info) || null;
+    const rejected = (info.rejected ?? []).map(String);
+
+    if (rejected.length > 0) {
+      console.error(
+        `[email] REJECTED "${subject}" → ${rejected.join(", ")} · server said: ${info.response}`
+      );
+    } else {
+      console.log(
+        `[email] sent "${subject}" → ${to} · id ${info.messageId}` +
+          (previewUrl ? ` · preview: ${previewUrl}` : "")
+      );
+    }
+
+    return { messageId: info.messageId, previewUrl };
+  } catch (error: unknown) {
+    // Logged here, with the SMTP detail, then rethrown so callers keep their
+    // existing behaviour. A bare "Failed to send verification email: [object
+    // Object]" upstream is not enough to tell a bad password from a bad host.
+    const e = error as { code?: string; responseCode?: number; message?: string };
+    console.error(
+      `[email] FAILED "${subject}" → ${to} · ${e.code ?? "?"} ${e.responseCode ?? ""} ${e.message ?? error}`
+    );
+    throw error;
   }
-  return { messageId: info.messageId, previewUrl };
 }
 
 // --- Templates -------------------------------------------------------------

@@ -17,6 +17,10 @@
  * behaviour can be verified directly with unit tests.
  */
 
+// Pure, dependency-free like the rest of this file: a lookup table plus string
+// normalisation, so the ranking stays testable without a database.
+import { canonicalSubject, canonicalSubjects } from "@/lib/subjects";
+
 /** z-score for a 95% confidence interval, used by the Wilson lower bound. */
 export const Z_95 = 1.96;
 
@@ -99,17 +103,24 @@ export function distanceScore(distanceKm: number, maxDistanceKm = 20): number {
 /**
  * Graded subject overlap in [0, 1] plus the list of matched subjects. Score is
  * (matched subjects / requested subjects), so a centre covering every subject a
- * student needs scores 1.0. Matching is case-insensitive.
+ * student needs scores 1.0.
+ *
+ * Comparison is on the canonical subject name (lib/subjects.ts), not on the
+ * lowercased text: a student who types "Add Maths" is asking for the same
+ * subject as a centre offering "Additional Mathematics", and comparing the
+ * words scored that centre 0. The names reported back in `matched` are the
+ * student's own wording, since that is what the explanation is shown next to.
  */
 export function subjectMatchScore(
   needed: string[],
   offered: string[],
 ): { score: number; matched: string[] } {
   if (!needed || needed.length === 0) return { score: 0, matched: [] };
-  const offeredLower = new Set(
-    (offered ?? []).map((s) => s.trim().toLowerCase()),
-  );
-  const matched = needed.filter((s) => offeredLower.has(s.trim().toLowerCase()));
+  const offeredCanonical = new Set(canonicalSubjects(offered));
+  const matched = needed.filter((s) => {
+    const canonical = canonicalSubject(s);
+    return canonical !== null && offeredCanonical.has(canonical);
+  });
   return { score: matched.length / needed.length, matched };
 }
 

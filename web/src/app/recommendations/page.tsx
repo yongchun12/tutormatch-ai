@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, MapPin, Star, ArrowRight, BrainCircuit, Search, Navigation, Loader2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import LocationAutocomplete from "@/components/LocationAutocomplete";
 import { getSmartRecommendationsAction } from "./actions";
 
 export default function PublicRecommendations() {
@@ -21,6 +22,12 @@ export default function PublicRecommendations() {
     const [searched, setSearched] = useState(false);
     /** Real coordinates, once the browser has given them. Null = text only. */
     const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+    /**
+     * Where `coords` came from, so the confirmation line can say so honestly.
+     * "Using your location" is true of the GPS button and false of a place
+     * picked from the dropdown — both rank by distance, from different points.
+     */
+    const [coordsFromGps, setCoordsFromGps] = useState(false);
     const [locating, setLocating] = useState(false);
     const [locationError, setLocationError] = useState("");
 
@@ -46,6 +53,7 @@ export default function PublicRecommendations() {
                 const lat = position.coords.latitude;
                 const lng = position.coords.longitude;
                 setCoords({ lat, lng });
+                setCoordsFromGps(true);
 
                 try {
                     const res = await fetch(`/api/location/geocode?lat=${lat}&lng=${lng}`);
@@ -147,17 +155,37 @@ export default function PublicRecommendations() {
                         <div>
                             <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">Preferred area <span className="text-slate-400 font-normal">(optional)</span></label>
                             <div className="flex gap-2">
-                                <Input
+                                {/*
+                                    Suggestions, not just a text box. Picking a place also
+                                    resolves its coordinates, which is what makes the ranking
+                                    engine's 20% distance weight count for a typed area — until
+                                    now only the GPS button opposite could supply them, so a
+                                    student who typed "Subang Jaya" was ranked without distance
+                                    at all.
+                                */}
+                                <LocationAutocomplete
                                     value={location}
-                                    onChange={(e) => {
-                                        setLocation(e.target.value);
+                                    onChange={(next) => {
+                                        setLocation(next);
                                         // Typing a different area invalidates the GPS fix — the
                                         // coordinates would otherwise keep ranking by distance
                                         // from wherever the student physically is while the text
                                         // says somewhere else.
                                         setCoords(null);
+                                        setCoordsFromGps(false);
+                                        setLocationError("");
+                                    }}
+                                    onPick={({ description, lat, lng }) => {
+                                        setLocation(description);
+                                        // Only when Google resolved them: a failed lookup leaves
+                                        // the name to be matched as text, rather than ranking
+                                        // against a stale position.
+                                        setCoords(lat != null && lng != null ? { lat, lng } : null);
+                                        setCoordsFromGps(false);
+                                        setLocationError("");
                                     }}
                                     placeholder="e.g. Subang Jaya, Penang..."
+                                    aria-label="Preferred area"
                                     className="py-5"
                                 />
                                 {/*
@@ -182,7 +210,9 @@ export default function PublicRecommendations() {
                             {coords && (
                                 <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1.5 inline-flex items-center gap-1">
                                     <Navigation className="w-3 h-3" />
-                                    Using your location — closer centres will rank higher.
+                                    {coordsFromGps
+                                        ? "Using your location — closer centres will rank higher."
+                                        : "Ranking by distance from this area — closer centres will rank higher."}
                                 </p>
                             )}
                             {locationError && (

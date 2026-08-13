@@ -236,9 +236,11 @@ export default function ReviewsClient({
 
                   {/*
                     Only reviews our model actually scored carry an AI label.
-                    Google reviews were previously shown with the same "AI Score"
-                    badge, but their sentiment is just a rating>=4 threshold
-                    applied on this page — not a model output.
+                    Google reviews once wore this badge on the strength of a
+                    rating>=4 threshold, which is not a model output; they now
+                    earn it by having their text classified like any other
+                    review. What still cannot wear it is a star-only rating —
+                    there is no text to read, so there is no label to show.
                   */}
                   {review.analysed ? (
                     <Badge

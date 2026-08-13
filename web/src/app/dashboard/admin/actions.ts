@@ -6,8 +6,9 @@ import { TuitionCentre } from "@/models/TuitionCentre";
 import { User } from "@/models/User";
 import { ClaimRequest } from "@/models/ClaimRequest";
 import { GateDecision } from "@/models/GateDecision";
-import { requireAdmin, requireUser } from "@/lib/authz";
+import { requireAdmin, requireUser, type SessionUser } from "@/lib/authz";
 import { needsEnrichment } from "@/lib/quality-gate";
+import { parseSubjectsInput } from "@/lib/subjects";
 import { validatePassword } from "@/lib/password";
 import { revalidatePath } from "next/cache";
 
@@ -284,7 +285,9 @@ export async function createCentreAction(formData: FormData) {
     const subjectsStr = formData.get("subjects") as string;
     const website = normaliseWebsite(formData.get("website") as string);
 
-    const subjects = subjectsStr ? subjectsStr.split(",").map(s => s.trim()).filter(Boolean) : [];
+    // Canonical names, so a subject typed here shares a filter checkbox with
+    // the same subject spelled differently by the crawler or the website sync.
+    const subjects = parseSubjectsInput(subjectsStr);
 
     await TuitionCentre.create({
         name,
@@ -318,7 +321,9 @@ export async function updateCentreAction(formData: FormData) {
     const subjectsStr = formData.get("subjects") as string;
     const website = normaliseWebsite(formData.get("website") as string);
 
-    const subjects = subjectsStr ? subjectsStr.split(",").map(s => s.trim()).filter(Boolean) : [];
+    // Canonical names, so a subject typed here shares a filter checkbox with
+    // the same subject spelled differently by the crawler or the website sync.
+    const subjects = parseSubjectsInput(subjectsStr);
 
     const centre = await TuitionCentre.findById(id);
     if (!centre) throw new Error("Centre not found");
@@ -366,6 +371,8 @@ export async function updateCentreAction(formData: FormData) {
 /** Why a claim was refused, so the UI can style the outcome without matching on text. */
 export type ClaimRefusal =
     | "not-signed-in"
+    | "not-an-owner"
+    | "already-has-centre"
     | "missing-proof"
     | "centre-missing"
     | "already-yours"
@@ -393,14 +400,42 @@ export async function submitClaimRequestAction(
     // A claim is submitted by the claimant themselves — require a signed-in user
     // and always attribute the claim to that session, never a caller-supplied id.
     let claimantId: string;
+    let claimantRole: SessionUser["role"];
     try {
         const user = await requireUser();
         claimantId = user.id;
+        claimantRole = user.role;
     } catch {
         return {
             success: false,
             reason: "not-signed-in",
             message: "Please sign in to claim a centre.",
+        };
+    }
+
+    /*
+      Claiming is an OWNER action, and this is the check that enforces it.
+
+      The centre page hides the button from students, but that is presentation
+      only: this is a Server Action, which is an independently-invokable endpoint
+      — a student's browser can call it directly whatever the page renders. Until
+      this guard existed, any signed-in account could file a claim, and an admin
+      approving it would hand a student ownership of a real centre along with its
+      enquiries and its listing.
+
+      Admins are excluded too, deliberately. Not as a punishment: they assign
+      ownership outright in Manage Centres, so a claim from an admin would be a
+      request to themselves.
+    */
+    if (claimantRole !== "owner") {
+        return {
+            success: false,
+            reason: "not-an-owner",
+            message:
+                claimantRole === "admin"
+                    ? "Admins don't claim listings — set the owner directly from Manage Centres."
+                    : "Only tuition centre owners can claim a listing. Your account is registered as a student, " +
+                      "so if you run this centre, please register an owner account and claim it from there.",
         };
     }
 
@@ -413,6 +448,37 @@ export async function submitClaimRequestAction(
     }
 
     await dbConnect();
+
+    /*
+      One centre per owner.
+
+      The owner dashboard is built around a single centre: both
+      dashboard/owner/page.tsx and dashboard/owner/centre/page.tsx read
+      `.find({ ownerId }).limit(1)`, so a second centre would be invisible and
+      uneditable while its enquiries and reviews — which those pages DO query
+      across every owned centre — kept arriving. Refusing the claim is honest
+      about what the application supports.
+
+      Rejected listings do not count. A centre an admin turned down is not one
+      the owner manages, and letting it block every future claim would strand
+      the account permanently.
+    */
+    const existingCentre = await TuitionCentre.findOne({
+        ownerId: claimantId,
+        status: { $ne: "rejected" },
+    })
+        .select("name")
+        .lean();
+
+    if (existingCentre) {
+        return {
+            success: false,
+            reason: "already-has-centre",
+            message:
+                `Your account already manages "${existingCentre.name}". An owner account can hold one ` +
+                `centre, so please contact support if you run more than one and we'll arrange it.`,
+        };
+    }
 
     // Three separate ways a claim must be refused. Previously only the second was
     // checked, so two different accounts could both hold a pending claim on the
@@ -504,6 +570,29 @@ export async function approveClaimRequestAction(claimId: string) {
         throw new Error(
             `"${centre.name}" is already owned by another account. Reject this claim, ` +
             `or remove the existing owner first.`
+        );
+    }
+
+    /*
+      The same one-centre-per-owner rule the submit side enforces, applied where
+      ownership actually transfers.
+
+      Claims filed before that rule existed are still sitting in the queue, and
+      approving one would hand a second centre to an account whose dashboard can
+      only ever show the first.
+    */
+    const otherCentre = await TuitionCentre.findOne({
+        _id: { $ne: claim.centreId },
+        ownerId: claim.userId,
+        status: { $ne: "rejected" },
+    })
+        .select("name")
+        .lean();
+
+    if (otherCentre) {
+        throw new Error(
+            `That account already manages "${otherCentre.name}". An owner account can hold one centre, ` +
+            `so reject this claim, or move the existing centre to another owner first.`
         );
     }
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { requireAnyRole, authorizationErrorResponse } from "@/lib/authz";
+import { canonicalSubject, canonicalSubjects } from "@/lib/subjects";
 
 export async function GET(request: Request) {
   try {
@@ -15,7 +16,12 @@ export async function GET(request: Request) {
     let query: any = { status: "approved" };
 
     if (subject) {
-      query.subjects = { $regex: new RegExp(subject, "i") };
+      // Searched under the canonical name, since that is what is stored:
+      // ?subject=add%20maths has to find the centres listed under "Additional
+      // Mathematics". An unrecognised term is passed through, so partial
+      // searches ("chem") still work.
+      const canonical = canonicalSubject(subject) ?? subject;
+      query.subjects = { $regex: new RegExp(canonical, "i") };
     }
     
     if (location) {
@@ -50,7 +56,9 @@ export async function POST(request: Request) {
     } = body ?? {};
 
     const newCentre = await TuitionCentre.create({
-      name, description, address, city, state, subjects, priceRange, teachingMode,
+      name, description, address, city, state,
+      // One name per subject, whatever the caller spelled — see lib/subjects.ts.
+      subjects: canonicalSubjects(subjects), priceRange, teachingMode,
       contactNumber, website, email, logoUrl, galleryUrls, latitude, longitude,
       // Owners own what they submit; admins may attribute via body.ownerId.
       ownerId: user.role === "owner" ? user.id : (body?.ownerId || undefined),

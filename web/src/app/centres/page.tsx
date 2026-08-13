@@ -15,6 +15,7 @@ import { aiService, CandidateCentre } from "@/services/aiService";
 
 import { discoverAndSyncCentres } from "@/services/scraperService";
 import { formatLocation, formatTeachingMode } from "@/lib/centre-display";
+import { canonicalSubjects } from "@/lib/subjects";
 
 // Helper to assign a random gradient based on centre ID string length or char code
 const getGradient = (id: string) => {
@@ -121,9 +122,16 @@ export default async function CentresDirectory(props: { searchParams: Promise<{ 
       // Which platform the two figures above describe, so the card can say so
       // rather than implying TutorMatch collected them.
       ratingSource: c.ratingSource ?? null,
-      // Guarded for the same reason as mode: the client maps over this, and a
-      // record written straight to MongoDB bypasses the schema default.
-      subjects: Array.isArray(c.subjects) ? c.subjects : [],
+      /*
+        Guarded for the same reason as mode: the client maps over this, and a
+        record written straight to MongoDB bypasses the schema default.
+
+        Canonicalised on the way out as well as on the way in. Every writer now
+        goes through lib/subjects.ts, but the Python crawler and any row saved
+        before that did not — and the Subjects filter is built by counting these
+        strings, so one stale "Matematik Tambahan" is a duplicate checkbox.
+      */
+      subjects: canonicalSubjects(c.subjects),
       price: c.priceRange,
       // May be absent — the crawler only sets it when the centre's own text
       // says so. Reading .charAt(0) off it crashed the whole directory page.

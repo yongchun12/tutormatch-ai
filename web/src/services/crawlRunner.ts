@@ -3,6 +3,7 @@ import { TuitionCentre } from "@/models/TuitionCentre";
 import { extractSubjectsFromText } from "@/services/scraperService";
 import { applyQualityGate, type GateContext } from "@/services/qualityGateService";
 import { autoSyncCentre } from "@/services/autoSync";
+import { autoImportReviews } from "@/services/autoReviews";
 import { parseMalaysianAddress } from "@/lib/address";
 
 /**
@@ -218,6 +219,12 @@ export async function runCrawl(context: GateContext): Promise<CrawlRunResult> {
     // amount filled in no matter which crawl found it.
     const synced = await autoSyncCentre(created._id.toString(), website, "crawl");
     if (synced.updated) syncedCount++;
+
+    // Step 2b — import and sentiment-score its Google reviews. Same contract as
+    // the sync above: never throws, never gates. A centre found by the scheduled
+    // crawl therefore arrives with its reviews already analysed, rather than
+    // waiting for someone to run the import script by hand.
+    await autoImportReviews(created._id.toString(), place.place_id, "crawl");
 
     // Step 3 — judge the enriched record. Re-read it because syncCentreData
     // saved its own copy of the document; `created` is now stale.

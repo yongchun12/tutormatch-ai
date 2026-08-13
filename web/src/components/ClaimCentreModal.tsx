@@ -26,6 +26,11 @@ const NOT_AN_ERROR: ReadonlySet<ClaimRefusal> = new Set<ClaimRefusal>([
   "already-owned",
   "own-claim-pending",
   "other-claim-pending",
+  // Wrong kind of account, not wrong input. A student retyping their proof
+  // cannot succeed, so the proof box is hidden and the reason is explained.
+  "not-an-owner",
+  // Right kind of account, but it already manages a centre.
+  "already-has-centre",
 ]);
 
 export default function ClaimCentreModal({ isOpen, setIsOpen, centreId, centreName, userId }: ClaimCentreModalProps) {

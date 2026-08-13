@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { MapPin, Star, Clock, CheckCircle2, TrendingUp, MessageSquare, ArrowLeft, Heart, ShieldCheck, ThumbsUp, ThumbsDown, Minus, Sparkles, BookOpen, Phone, Globe, Mail, Image as ImageIcon, Megaphone } from "lucide-react";
 import dbConnect from "@/lib/db";
+import { aiService } from "@/services/aiService";
+import { canonicalSubjects } from "@/lib/subjects";
 import { TuitionCentre } from "@/models/TuitionCentre";
 import { Review } from "@/models/Review";
 import { User } from "@/models/User";
@@ -28,6 +30,31 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
   await dbConnect();
   
   const session = await getServerSession(authOptions);
+  const viewerRole = (session?.user as any)?.role as "student" | "owner" | "admin" | undefined;
+
+  /*
+    Whether to offer the "Claim This Centre" button at all.
+
+    Claiming is for the person who runs the centre, so a student never sees it —
+    inviting them to prove they own a tuition centre only to refuse the claim is
+    a worse experience than not offering it. Nor does an owner who already
+    manages a centre, since the dashboard supports exactly one. A signed-out
+    visitor still gets the button because we do not know who they are yet; the
+    modal sends them to log in, and the Server Action decides afterwards.
+
+    This is presentation only. submitClaimRequestAction enforces both rules
+    server-side, which is what actually stops a claim being filed.
+  */
+  const viewerAlreadyOwnsACentre =
+    viewerRole === "owner" &&
+    (await TuitionCentre.exists({
+      ownerId: (session!.user as any).id,
+      status: { $ne: "rejected" },
+    })) !== null;
+
+  const canOfferClaim =
+    !session?.user || (viewerRole === "owner" && !viewerAlreadyOwnsACentre);
+
   let userSavedCentres: string[] = [];
   if (session && session.user && (session.user as any).role === "student") {
     const user = await User.findById((session.user as any).id).lean();
@@ -103,10 +130,23 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
         ratingSource: rawCentre.ratingSource,
         tutorMatchRating: rawCentre.tutorMatchRating || 0,
         tutorMatchReviewCount: rawCentre.tutorMatchReviewCount || 0,
+        /*
+          How many ratings this centre has on Google ALTOGETHER — the
+          denominator the sentiment summary is measured against.
+
+          It is not the number of reviews anything here can read. Google's API
+          releases at most five review texts per request; this number is often in
+          the hundreds. Printing it beside the analysed count is the only way the
+          summary can say how small a slice it is describing.
+        */
+        googleRatingTotal: rawCentre.reviewCount || 0,
         // Records written straight to MongoDB by the Python crawler bypass every
         // Mongoose default, so these can genuinely be missing. Fall back rather
-        // than crash the whole page.
-        subjects: Array.isArray(rawCentre.subjects) ? rawCentre.subjects : [],
+        // than crash the whole page. Canonicalised (lib/subjects.ts) so this
+        // page names a subject exactly as the directory's filter does, and a
+        // record holding both "Add Math" and "Additional Mathematics" lists it
+        // once.
+        subjects: canonicalSubjects(rawCentre.subjects),
         price: rawCentre.priceRange || "Contact for pricing",
         // Falling back to "Physical" here reprinted the invented default the
         // schema no longer stores, so an unknown mode is shown as unknown.
@@ -153,30 +193,49 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
               
               // Real-time fallback for review count
               const liveReviewCount = data.result.user_ratings_total || 0;
+              if (liveReviewCount > centre.googleRatingTotal) {
+                centre.googleRatingTotal = liveReviewCount;
+              }
               if (typeof data.result.rating === "number") {
                 centre.rating = data.result.rating;
                 centre.ratingSource = "google";
               }
 
               if (data.result.reviews) {
-                const googleReviews = data.result.reviews
-                  // Skip any we have already imported and classified properly.
-                  .filter((r: any) => !storedGoogleIds.has(`google:${r.time}`))
-                  .map((r: any) => ({
-                    id: `google-${r.time}`,
-                    name: r.author_name || "Google User",
-                    // A crude rating threshold, NOT our sentiment model. This is
-                    // the fallback for a centre whose Google reviews have not been
-                    // imported yet; flagged `analysed: false` so it is excluded
-                    // from the model's figures and labelled honestly on the card.
-                    // Import the centre (admin → Manage Centres) and the stored
-                    // copy replaces this with a real classification.
-                    score: r.rating >= 4 ? "positive" : (r.rating <= 2 ? "negative" : "neutral"),
-                    text: r.text,
-                    rating: r.rating,
-                    source: "google" as const,
-                    analysed: false,
-                  }));
+                /*
+                  These used to be labelled by a rating threshold — positive if
+                  the writer left 4 stars or more — and then excluded from the
+                  summary because that is not a model output. The exclusion was
+                  honest but it also meant the feature analysed nothing at all on
+                  a centre whose reviews had never been imported, and everything
+                  it did show was Google's own high-star selection.
+
+                  They now go through the SAME classifier as every other review,
+                  reading the text. Nothing about a star rating enters it, so the
+                  label is earned and the review can be counted.
+                */
+                const googleReviews = await Promise.all(
+                  data.result.reviews
+                    // Skip any we have already imported and classified properly.
+                    .filter((r: any) => !storedGoogleIds.has(`google:${r.time}`))
+                    .map(async (r: any) => {
+                      const text = (r.text ?? "").trim();
+                      // A star-only rating leaves the model nothing to read, so
+                      // it stays unanalysed rather than being guessed at.
+                      const sentiment = text
+                        ? await aiService.analyzeSentiment(text)
+                        : null;
+                      return {
+                        id: `google-${r.time}`,
+                        name: r.author_name || "Google User",
+                        score: sentiment?.score ?? "neutral",
+                        text: r.text,
+                        rating: r.rating,
+                        source: "google" as const,
+                        analysed: sentiment !== null,
+                      };
+                    })
+                );
                 reviewsList = [...reviewsList, ...googleReviews];
               }
 
@@ -192,19 +251,17 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
       /*
         Sentiment summary — counted ONLY over reviews our model actually scored.
 
-        This used to run over the merged list including Google reviews that
-        carried no model output at all: their "sentiment" was the `rating >= 4`
-        threshold above. A centre with 2 TutorMatch reviews and 5 Google ones
-        reported "our model processed 7 reviews", of which it had processed 2.
+        `analysed` is the whole test, and it is earned rather than assumed: it is
+        true when the classifier read the review's text, whether that text came
+        from the stored import (services/googleReviewImport.ts) or from the live
+        fetch above. It is false for a star-only rating, which has no text to
+        read. Nothing here is labelled from a star count.
 
-        `analysed` is now the whole test, and it is earned rather than assumed: a
-        Google review counts once it has been imported and run through the same
-        classifier as a TutorMatch review (services/googleReviewImport.ts). One
-        that is only being previewed from the live API still does not count.
-
-        The two populations are also reported separately below, because a
-        combined percentage hides which platform the opinion came from — and the
-        Google sample is capped at five reviews by the API however many exist.
+        The two populations are reported separately below, because a combined
+        percentage hides which platform the opinion came from — and READ THE CAP:
+        Google's API returns at most five review texts per request and picks them
+        itself, so the Google column describes that handful, never the hundreds
+        of ratings behind the centre's headline score.
       */
       const analysedReviews = reviewsList.filter((r) => r.analysed);
       if (analysedReviews.length > 0) {
@@ -529,29 +586,37 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                     <CardTitle className="font-heading text-2xl">Sentiment Analysis Summary</CardTitle>
                     <CardDescription>
                       {/*
-                        States the exact denominator, and where it came from. The
-                        original copy said "processed {reviewsList.length} student
-                        reviews" while computing over Google reviews the model had
-                        never read; the replacement then said Google reviews were
-                        never included, which stopped being true once they could be
-                        imported and classified. It now describes whatever is
-                        actually in the mix.
+                        States the exact denominator, where it came from, and —
+                        for Google — how small a slice of that platform it is.
+                        The last part matters more than it looks: Google releases
+                        at most five review texts per request and chooses them
+                        itself, favouring its "most relevant" ones, which is why
+                        a summary built from them reads far more positive than
+                        the centre's own star average. Saying "5 of 168" lets a
+                        reader discount it accordingly; printing "83% positive"
+                        alone would not.
                       */}
                       Based on the {aiSummary.total} review{aiSummary.total === 1 ? "" : "s"} our
                       sentiment model has read and classified
                       {aiSummary.bySource?.tutormatch && aiSummary.bySource?.google ? (
                         <> — {aiSummary.bySource.tutormatch.total} written on TutorMatch
-                          and {aiSummary.bySource.google.total} imported from Google.</>
+                          and {aiSummary.bySource.google.total} read from Google.</>
                       ) : aiSummary.bySource?.google ? (
-                        <> — all of them imported from Google.</>
+                        <> — all of them read from Google.</>
                       ) : (
                         <> — all of them written on TutorMatch.</>
+                      )}
+                      {aiSummary.bySource?.google && centre.googleRatingTotal > aiSummary.bySource.google.total && (
+                        <> Google holds {centre.googleRatingTotal} ratings for this centre but
+                          publishes only a handful of the written ones through its API, so the
+                          Google figures below describe those {aiSummary.bySource.google.total},
+                          not all {centre.googleRatingTotal}.</>
                       )}
                       {reviewsList.length > aiSummary.total && (
                         <> {reviewsList.length - aiSummary.total} more review
                           {reviewsList.length - aiSummary.total === 1 ? " is" : "s are"} shown
-                          below but not counted here, because {reviewsList.length - aiSummary.total === 1 ? "it has" : "they have"} not
-                          been through the model.</>
+                          below but not counted here, because {reviewsList.length - aiSummary.total === 1 ? "it has" : "they have"} no
+                          written text for the model to read.</>
                       )}
                     </CardDescription>
                   </CardHeader>
@@ -562,7 +627,7 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                           No reviews have been through the sentiment model yet, so there is
                           nothing to summarise.
                           {reviewsList.length > 0 &&
-                            " The reviews below came from Google and have not been imported for analysis."}
+                            " The reviews below are star ratings with no written text, so there is nothing for the model to read."}
                         </p>
                       </div>
                     ) : (
@@ -776,9 +841,19 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                 <CardHeader>
                   <CardTitle className="font-heading">Enquire Now</CardTitle>
                   <CardDescription>
-                    {centre.isVerified 
-                      ? "Get in touch with the centre admin directly." 
-                      : "This centre has not been claimed by its owner yet."}
+                    {/*
+                      Three states, not two. `isVerified` and `ownerId` are
+                      different facts and this card used to read only the first,
+                      so a centre its owner had created and an admin had approved
+                      was still described as "not claimed by its owner yet" — to
+                      the owner, on their own listing, above a Claim button that
+                      refuses with "you already own this centre".
+                    */}
+                    {centre.isVerified
+                      ? "Get in touch with the centre admin directly."
+                      : centre.ownerId
+                        ? "This centre is managed by its owner and is awaiting verification."
+                        : "This centre has not been claimed by its owner yet."}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -787,14 +862,38 @@ export default async function CentreDetailPage({ params }: { params: Promise<{ i
                   ) : (
                     <div className="text-center p-6 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
                       <ShieldCheck className="w-10 h-10 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
-                      <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-                        Direct enquiries are only available for verified centres. If you are the owner, you can claim this listing to start receiving student enquiries.
-                      </p>
-                      <ClaimCentreButtonWrapper 
-                        centreId={centre.id} 
-                        centreName={centre.name} 
-                        userId={(session?.user as any)?.id} 
-                      />
+                      {centre.ownerId ? (
+                        /*
+                          Already owned — so there is nothing to claim, whoever
+                          is looking. The listing is simply waiting on the admin
+                          verification step, which is a separate decision from
+                          the approval that put it in the directory.
+                        */
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                          This listing has an owner and is waiting to be verified by TutorMatch.
+                          Direct enquiries open once verification is complete.
+                        </p>
+                      ) : canOfferClaim ? (
+                        <>
+                          <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                            Direct enquiries are only available for verified centres. If you are the owner, you can claim this listing to start receiving student enquiries.
+                          </p>
+                          <ClaimCentreButtonWrapper
+                            centreId={centre.id}
+                            centreName={centre.name}
+                            userId={(session?.user as any)?.id}
+                          />
+                        </>
+                      ) : (
+                        // A student or an admin. Neither can claim, so the
+                        // sentence stops at the fact and offers no button:
+                        // "you can claim this listing" would be an invitation
+                        // the next screen refuses.
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                          Direct enquiries are only available for verified centres. Nobody has claimed
+                          this listing yet, so the centre cannot be contacted through TutorMatch.
+                        </p>
+                      )}
                     </div>
                   )}
                 </CardContent>

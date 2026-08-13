@@ -147,7 +147,22 @@ feature, and each fails safely when left blank.
 | `GEMINI_API_KEY` | AI-written recommendation reasons, reading centre websites, the chatbot | Recommendations still work using the built-in ranking engine |
 | `CRON_SECRET` | The automatic scheduled search | Scheduling is disabled. The admin "Search now" button still works |
 | `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET_NAME` | Uploading centre photos | Photo upload is unavailable; nothing else is affected |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | Sending real verification and password-reset emails | No real email is sent, but a **preview link is printed in the terminal**, which is enough to complete the flow |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | Sending verification and password-reset emails to a real inbox or a Mailtrap test inbox | No email is sent, but a **preview link is printed in the terminal**, which is enough to complete the flow |
+
+Set all four together. If `SMTP_HOST` is set, `SMTP_USER` and `SMTP_PASS` are
+required — the application will not quietly fall back to the preview transport,
+because a test inbox that silently receives nothing looks exactly like a broken
+one. To see which of the two is live, and to put a real message in the inbox:
+
+```bash
+npm run email:check                       # report the transport and test the login
+npm run email:check -- --send you@example.com   # also send a real activation email
+```
+
+With Mailtrap, take all five values from **Email Testing → your inbox →
+Integrations → Nodemailer**. They are issued per inbox: credentials from one
+inbox deliver into that inbox only, which is the usual reason a message seems
+to vanish.
 
 If you supply a Google key, enable these APIs in the Google Cloud Console:
 **Places API**, **Geocoding API**, **Maps JavaScript API**.
@@ -187,6 +202,8 @@ Run from the `web` folder.
 | `npm run reset` | Wipe, then recreate the accounts |
 | `npm run cron` | Run the scheduled search locally |
 | `npm run reviews:import` | Import real reviews and analyse their sentiment |
+| `npm run email:check` | Show where emails are being sent, and test the connection |
+| `npm run email:inbox` | Ask Mailtrap which inbox those credentials deliver into (needs `MAILTRAP_API_TOKEN`) |
 | `npm run lint` | Check code style |
 
 ---
@@ -199,7 +216,8 @@ Run from the `web` folder.
 | Cannot connect to MongoDB | Check `MONGODB_URI`. On Atlas, add your current IP under *Network Access*, or allow `0.0.0.0/0` for testing |
 | `Port 3000 is in use` | Stop the other program, or run `npm run dev -- -p 3001` and open port 3001 instead |
 | Login fails | Run `npm run seed` first — the accounts do not exist until then |
-| No verification email arrives | Expected when SMTP is not configured. A preview link is printed in the terminal |
+| No verification email arrives | Run `npm run email:check`. With no SMTP configured this is expected — a preview link is printed in the terminal instead |
+| `email:check` says the message was accepted, but the Mailtrap inbox is empty | The credentials belong to a different inbox. Mailtrap issues a username and password **per inbox**, and the SMTP conversation never names one. Compare the `user` under *Email Testing → your inbox → Integrations → Nodemailer* with `SMTP_USER` in `web/.env.local`, or run `npm run email:inbox` to have Mailtrap name the inbox itself |
 | Page is blank or errors on first load | The first visit to each page compiles on demand and can take a few seconds. Refresh once |
 | Reviews show "Not analysed by TutorMatch" | No reviews have been imported yet. Run `npm run reviews:import -- --limit 10` |
 | Recommendations return nothing | Enter a specific town such as `Petaling Jaya` or `Kuala Lumpur` rather than a broad region name, and separate multiple subjects with a comma, e.g. `Mathematics, Science` |

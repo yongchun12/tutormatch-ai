@@ -73,6 +73,17 @@ export interface ITuitionCentre extends Document {
    */
   lastSyncAttemptAt?: Date;
   /**
+   * When this centre's Google reviews were last fetched and sentiment-scored.
+   *
+   * Separate from lastSyncAttemptAt because the two jobs read different sources
+   * and fail for different reasons: that one reads the centre's own website via
+   * Gemini, this one calls Google Places Details. A centre with a dead website
+   * still has perfectly importable reviews, so one must not gate the other.
+   *
+   * Absent means never imported.
+   */
+  lastReviewImportAt?: Date;
+  /**
    * Where this record was FIRST discovered. Set once at creation and never
    * rewritten by enrichment — the quality gate's directory exemption depends on
    * it still being true after Google Places has filled in a place ID.
@@ -133,6 +144,9 @@ const TuitionCentreSchema: Schema<ITuitionCentre> = new Schema(
     // No default: "never attempted" must be distinguishable from "attempted at
     // the epoch", because the background sweep prefers never-tried centres.
     lastSyncAttemptAt: { type: Date },
+    // Same reasoning as above: no default, so "never imported" stays
+    // distinguishable from "imported at the epoch".
+    lastReviewImportAt: { type: Date },
     discoverySource: {
       type: String,
       enum: ["google-places", "directory", "owner", "admin"],
@@ -171,6 +185,9 @@ TuitionCentreSchema.index({ needsEnrichment: 1, status: 1 });
 // Drives the background sync sweep: incomplete centres, least recently attempted
 // first. Ascending on lastSyncAttemptAt so never-attempted (missing) sorts first.
 TuitionCentreSchema.index({ needsEnrichment: 1, lastSyncAttemptAt: 1 });
+// Drives the background review-import sweep: centres matched to a Google listing,
+// least recently imported first. Ascending so never-imported (missing) sorts first.
+TuitionCentreSchema.index({ googlePlaceId: 1, lastReviewImportAt: 1 });
 
 export const TuitionCentre: Model<ITuitionCentre> = 
   mongoose.models.TuitionCentre || mongoose.model<ITuitionCentre>("TuitionCentre", TuitionCentreSchema);
