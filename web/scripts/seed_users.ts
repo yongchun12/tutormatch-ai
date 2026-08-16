@@ -6,7 +6,23 @@ import { assertDisposableDatabase, announceDatabase, DB_NAME } from "./_guard";
 
 dotenv.config({ path: ".env.local" });
 
+/**
+ * Create the demo login accounts.
+ *
+ *   npm run seed:users               six accounts: the three advertised on the
+ *                                    login page plus three legacy ones
+ *   npm run seed:users -- --minimal  exactly one admin, one owner, one student
+ *
+ * --minimal exists for walking the whole application end to end. Six accounts
+ * are convenient for demos and confusing for a flow test: three of them are
+ * duplicates of the other three with a different password, so "the owner" is
+ * ambiguous, and one-centre-per-owner behaviour is hard to reason about when
+ * two owner accounts exist. The minimal student is also created with NO saved
+ * preferences, so the preferences step is something to test rather than
+ * something already done.
+ */
 const run = async () => {
+  const minimal = process.argv.includes("--minimal");
   const MONGODB_URI = process.env.MONGODB_URI;
   if (!MONGODB_URI) throw new Error("No MONGODB_URI");
 
@@ -30,6 +46,20 @@ const run = async () => {
   };
 
   await User.deleteMany({});
+
+  if (minimal) {
+    // The same three emails the login page advertises, so its hints stay true.
+    await User.create({ name: "System Admin", email: "admin@tuition.com", passwordHash: await hash("password123"), role: "admin", emailVerified: true });
+    await User.create({ name: "Centre Owner", email: "owner@tuition.com", passwordHash: await hash("password123"), role: "owner", emailVerified: true });
+    // No studentProfile: an empty student is the starting point of the flow.
+    await User.create({ name: "Test Student", email: "student@tuition.com", passwordHash: await hash("password123"), role: "student", emailVerified: true });
+
+    console.log(`\n3 accounts created in "${DB_NAME}" (password: password123):`);
+    console.log("   admin@tuition.com     admin");
+    console.log("   owner@tuition.com     owner   (owns no centre yet)");
+    console.log("   student@tuition.com   student (no saved preferences yet)\n");
+    process.exit(0);
+  }
 
   // Showcase accounts advertised on the login page (password: password123).
   await User.create({ name: "System Admin", email: "admin@tuition.com", passwordHash: await hash("password123"), role: "admin", emailVerified: true });
